@@ -6,51 +6,40 @@ import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 import datetime
 
+# 1) Page Config
 st.set_page_config(
     page_title="Bitcoin On-chain Indicators Dashboard",
     layout="wide",
     initial_sidebar_state="expanded",
 )
 
-
-###########################
-# 1) SNOWFLAKE CONNECTION
-###########################
+# 2) Snowflake Connection
 cx = st.connection("snowflake")
 session = cx.session()
 
-##########################################
-# 2) PAGE CONFIG & DARK THEME STYLING
-##########################################
-
-# Inject basic CSS to make the entire background black
+# 3) Dark Theme Styling (full black background)
 st.markdown(
     """
     <style>
     body {
-        background-color: #000000;    /* FULL BLACK */
+        background-color: #000000;
         color: #f0f2f6;
     }
-    /* Streamlit blocks, columns, etc. */
     .css-18e3th9, .css-1dp5vir, .css-12oz5g7, .st-bq {
-        background-color: #000000 !important;  /* Keep everything black */
+        background-color: #000000 !important;
     }
-    /* Text elements */
     .css-15zrgzn, .css-1hynb2t, .css-1xh633b, .css-17eq0hr {
         color: #f0f2f6;
     }
     .css-1xh633b a {
-        color: #1FA2FF;  /* Link color */
+        color: #1FA2FF;
     }
     </style>
     """,
     unsafe_allow_html=True
 )
 
-##########################################
-# 3) TABLE & COLUMN CONFIGURATIONS
-##########################################
-
+# 4) Table Configurations
 TABLE_DICT = {
     "ACTIVE_ADDRESSES": {
         "table_name": "BTC_DATA.DATA.ACTIVE_ADDRESSES",
@@ -118,18 +107,17 @@ BTC_PRICE_TABLE = "BTC_DATA.DATA.BTC_PRICE_USD"
 BTC_PRICE_DATE_COL = "DATE"
 BTC_PRICE_VALUE_COL = "BTC_PRICE_USD"
 
-###################################
-# 4) LAYOUT: MAIN & SIDEBAR COLUMNS
-###################################
+# 5) Page Title
 st.title("Bitcoin On-chain Indicators Dashboard")
 
-col_chart, col_controls = st.columns([3, 1])
+#########################
+# 6) CONTROLS (TOP)
+#########################
+control_container = st.container()
+with control_container:
+    st.subheader("Chart Controls")
 
-####################################
-# 5) SIDEBAR-LIKE CONTROLS (RIGHT)
-####################################
-with col_controls:
-    # --- 5a) Table & Indicators Selection ---
+    # Table & Indicators
     selected_table = st.selectbox(
         "Select a Table (Metric Set)",
         list(TABLE_DICT.keys()),
@@ -145,47 +133,42 @@ with col_controls:
         help="Pick one or more numeric columns to plot on the left axis."
     )
 
-    st.markdown("---")
+    # Axis Scales & Chart Types
+    col1, col2, col3, col4 = st.columns(4)
 
-    # --- 5b) Axis Scales & Chart Types ---
-    st.markdown("**Indicator Y-Axis Scale**")
-    scale_option_indicator = st.radio("Indicator Axis:", ("Linear", "Log"))
+    with col1:
+        scale_option_indicator = st.radio("Indicator Axis", ["Linear", "Log"], index=0)
+    with col2:
+        scale_option_price = st.radio("BTC Price Axis", ["Linear", "Log"], index=0)
+    with col3:
+        chart_type_indicators = st.radio("Indicators", ["Line", "Bars"], index=0)
+    with col4:
+        chart_type_price = st.radio("BTC Price", ["Line", "Bars"], index=0)
 
-    st.markdown("**BTC Price Y-Axis Scale**")
-    scale_option_price = st.radio("BTC Price Axis:", ("Linear", "Log"))
-
-    st.markdown("**Indicator Chart Type**")
-    chart_type_indicators = st.radio("Indicators:", ("Line", "Bars"))
-
-    st.markdown("**BTC Price Chart Type**")
-    chart_type_price = st.radio("BTC Price:", ("Line", "Bars"))
-
-    st.markdown("---")
-
-    # --- 5c) EMA Option ---
+    # EMA Option
     show_ema = st.checkbox("Add EMA for Indicators", value=False)
     if show_ema:
         ema_period = st.number_input("EMA Period (days)", min_value=2, max_value=200, value=20)
 
+    # Date & BTC Price toggle
+    col5, col6 = st.columns(2)
+    with col5:
+        default_start_date = datetime.date(2015, 1, 1)
+        selected_start_date = st.date_input(
+            "Start Date",
+            value=default_start_date,
+            help="Filter data from this date onward."
+        )
+    with col6:
+        show_btc_price = st.checkbox("Show BTC Price?", value=True)
+
+    # Color Pickers
     st.markdown("---")
-
-    # --- 5d) Start Date + Show/Hide BTC Price ---
-    default_start_date = datetime.date(2015, 1, 1)
-    selected_start_date = st.date_input(
-        "Start Date",
-        value=default_start_date,
-        help="Filter data from this date onward."
-    )
-
-    show_btc_price = st.checkbox("Show BTC Price?", value=True)
-
-    st.markdown("---")
-
-    # --- 5e) Color Pickers ---
+    st.markdown("**Colors**")
     if "colors" not in st.session_state:
         st.session_state["colors"] = {}
 
-    # BTC Price Color (only relevant if user wants to see it)
+    # BTC Price color (if enabled)
     if show_btc_price:
         btc_price_color = st.color_picker(
             "BTC Price Color",
@@ -193,27 +176,26 @@ with col_controls:
         )
         st.session_state["colors"]["BTC_PRICE"] = btc_price_color
 
-    # Colors for each selected indicator
     for col in selected_columns:
         default_col_color = st.session_state["colors"].get(col, "#0000FF")
         picked_color = st.color_picker(f"Color for {col}", value=default_col_color)
         st.session_state["colors"][col] = picked_color
 
+    # Plot Button
     st.markdown("---")
-
-    # --- 5f) Plot Button ---
     plot_button = st.button("Plot Data")
 
-###################################
-# 6) MAIN CHART AREA (LEFT COLUMN)
-###################################
-with col_chart:
+#########################
+# 7) CHART (BOTTOM)
+#########################
+plot_container = st.container()
+with plot_container:
     if plot_button:
         if not selected_columns:
             st.warning("Please select at least one indicator column.")
             st.stop()
 
-        # 6a) Query BTC Price if desired
+        # Query BTC Price if requested
         btc_price_df = pd.DataFrame()
         if show_btc_price:
             btc_price_query = f"""
@@ -228,7 +210,7 @@ with col_chart:
             btc_price_df = session.sql(btc_price_query).to_pandas()
             btc_price_df.rename(columns={"PRICE_DATE": "DATE"}, inplace=True)
 
-        # 6b) Query Selected Indicator(s)
+        # Query Selected Indicator(s)
         date_col = table_info["date_col"]
         columns_for_query = ", ".join(selected_columns)
         indicator_query = f"""
@@ -246,7 +228,7 @@ with col_chart:
             st.warning("No data returned. Check your date range or table.")
             st.stop()
 
-        # 6c) Merge Data on DATE (if BTC Price is requested)
+        # Merge if BTC Price is shown
         if show_btc_price and not btc_price_df.empty:
             merged_df = pd.merge(
                 btc_price_df,
@@ -255,24 +237,21 @@ with col_chart:
                 how="inner"
             )
         else:
-            # If not showing BTC price, we only have indicator data
             merged_df = indicator_df
 
         if merged_df.empty:
             st.warning("No overlapping data in the selected date range.")
             st.stop()
 
-        # 6d) EMA Calculation (if requested)
-        # We'll create an EMA trace for each selected indicator
+        # EMA Calculation
         if show_ema:
             for col in selected_columns:
-                # Compute an exponentially weighted moving average
                 merged_df[f"EMA_{col}"] = merged_df[col].ewm(span=ema_period).mean()
 
-        # 6e) Build the Plotly Figure with Two Y-Axes
+        # Build Plotly Figure
         fig = make_subplots(specs=[[{"secondary_y": True}]])
         
-        # Add each selected indicator to the left Y-axis
+        # Plot each indicator on left axis
         for col in selected_columns:
             if chart_type_indicators == "Line":
                 fig.add_trace(
@@ -295,7 +274,6 @@ with col_chart:
                     ),
                     secondary_y=False
                 )
-            # If EMA is enabled, add a dashed line for that indicator
             if show_ema:
                 fig.add_trace(
                     go.Scatter(
@@ -303,16 +281,13 @@ with col_chart:
                         y=merged_df[f"EMA_{col}"],
                         mode="lines",
                         name=f"EMA({ema_period}) - {col}",
-                        line=dict(
-                            color=st.session_state["colors"][col],
-                            dash="dash"
-                        ),
+                        line=dict(color=st.session_state["colors"][col], dash="dash"),
                         opacity=0.8
                     ),
                     secondary_y=False
                 )
 
-        # If user opted to show BTC price, add it to the right Y-axis
+        # BTC Price on right axis (if enabled)
         if show_btc_price and not btc_price_df.empty:
             if chart_type_price == "Line":
                 fig.add_trace(
@@ -336,10 +311,10 @@ with col_chart:
                     secondary_y=True
                 )
 
-        # 6f) Update Layout
+        # Update Layout
         fig.update_layout(
-            paper_bgcolor="#0e1012",
-            plot_bgcolor="#0e1012",
+            paper_bgcolor="#000000",
+            plot_bgcolor="#000000",
             title=f"{selected_table} vs BTC Price" if show_btc_price else f"{selected_table}",
             hovermode="x unified",
             font=dict(color="#f0f2f6"),
@@ -350,19 +325,13 @@ with col_chart:
                 orientation="h"
             )
         )
-
-        # X-axis
         fig.update_xaxes(title_text="Date", gridcolor="#4f5b66")
-
-        # Left Y-axis (indicators)
         fig.update_yaxes(
             title_text="Indicator Value",
             type="log" if scale_option_indicator == "Log" else "linear",
             secondary_y=False,
             gridcolor="#4f5b66"
         )
-
-        # Right Y-axis (BTC Price)
         fig.update_yaxes(
             title_text="BTC Price (USD)",
             type="log" if scale_option_price == "Log" else "linear",
@@ -370,7 +339,6 @@ with col_chart:
             gridcolor="#4f5b66"
         )
 
-        # 6g) Render the final chart
         st.plotly_chart(fig, use_container_width=True)
 
     else:
