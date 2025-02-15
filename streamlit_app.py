@@ -1,7 +1,6 @@
 # streamlit_app.py
 
 import streamlit as st
-from snowflake.snowpark.context import get_active_session
 import pandas as pd
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
@@ -10,7 +9,8 @@ import datetime
 ###########################
 # 1) SNOWFLAKE CONNECTION
 ###########################
-session = get_active_session()
+cx = st.connection("snowflake")
+session = cx.session()
 
 ##########################################
 # 2) PAGE CONFIG & DARK THEME STYLING
