@@ -6,6 +6,13 @@ import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 import datetime
 
+st.set_page_config(
+    page_title="Bitcoin On-chain Indicators Dashboard",
+    layout="wide",
+    initial_sidebar_state="expanded",
+)
+
+
 ###########################
 # 1) SNOWFLAKE CONNECTION
 ###########################
@@ -15,11 +22,6 @@ session = cx.session()
 ##########################################
 # 2) PAGE CONFIG & DARK THEME STYLING
 ##########################################
-st.set_page_config(
-    page_title="Bitcoin On-chain Indicators Dashboard",
-    layout="wide",
-    initial_sidebar_state="expanded",
-)
 
 # Inject basic CSS to make the entire background black
 st.markdown(
