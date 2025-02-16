@@ -29,10 +29,10 @@ st.markdown(
         background-color: #000000 !important;
     }
     .css-15zrgzn, .css-1hynb2t, .css-1xh633b, .css-17eq0hr {
-        color: #f0f2f6;
+        color: #000000;
     }
     .css-1xh633b a {
-        color: #1FA2FF;
+        color: #000000;
     }
     </style>
     """,
