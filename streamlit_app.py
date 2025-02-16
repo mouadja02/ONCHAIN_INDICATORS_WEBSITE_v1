@@ -23,16 +23,16 @@ st.markdown(
     <style>
     body {
         background-color: #000000;
-        color: #000000;
+        color: #f0f2f6;
     }
     .css-18e3th9, .css-1dp5vir, .css-12oz5g7, .st-bq {
         background-color: #000000 !important;
     }
     .css-15zrgzn, .css-1hynb2t, .css-1xh633b, .css-17eq0hr {
-        color: #000000;
+        color: #f0f2f6;
     }
     .css-1xh633b a {
-        color: #000000;
+        color: #1FA2FF;
     }
     </style>
     """,
