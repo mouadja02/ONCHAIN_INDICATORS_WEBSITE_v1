@@ -100,12 +100,19 @@ TABLE_DICT = {
         "date_col": "CREATED_TIMESTAMP",  # TIMESTAMP_NTZ(9)
         "numeric_cols": ["BTC_VALUE"]
     },
-    # New Entry: Puell Multiple
+    # The BTC_PRICE_USD table is used solely for overlaying the BTC Price.
+
+    # >>> NEW ENTRY FOR PUELL_MULTIPLE <<<
     "PUELL_MULTIPLE": {
         "table_name": "BTC_DATA.DATA.PUELL_MULTIPLE",
-        "date_col": "DATE",  # Should be a DATE column
-        "numeric_cols": ["PUELL_MULTIPLE"]
-    }
+        "date_col": "DATE",  # DATE
+        "numeric_cols": [
+            "MINTED_BTC",
+            "DAILY_ISSUANCE_USD",
+            "MA_365_ISSUANCE_USD",
+            "PUELL_MULTIPLE"
+        ]
+    },
 }
 
 BTC_PRICE_TABLE = "BTC_DATA.DATA.BTC_PRICE_USD"
