@@ -104,12 +104,7 @@ TABLE_DICT = {
     "PUELL_MULTIPLE": {
         "table_name": "BTC_DATA.DATA.PUELL_MULTIPLE",
         "date_col": "DATE",  # Should be a DATE column
-        "numeric_cols": [
-            "MINTED_BTC",
-            "DAILY_ISSUANCE_USD",
-            "MA_365_ISSUANCE_USD",
-            "PUELL_MULTIPLE"
-        ]
+        "numeric_cols": ["PUELL_MULTIPLE"]
     }
 }
 
