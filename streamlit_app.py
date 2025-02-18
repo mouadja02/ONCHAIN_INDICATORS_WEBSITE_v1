@@ -100,8 +100,6 @@ TABLE_DICT = {
         "date_col": "CREATED_TIMESTAMP",  # TIMESTAMP_NTZ(9)
         "numeric_cols": ["BTC_VALUE"]
     },
-    # The BTC_PRICE_USD table is used solely for overlaying the BTC Price.
-
     # >>> NEW ENTRY FOR PUELL_MULTIPLE <<<
     "PUELL_MULTIPLE": {
         "table_name": "BTC_DATA.DATA.PUELL_MULTIPLE",
@@ -174,6 +172,9 @@ with control_container:
     with col6:
         show_btc_price = st.checkbox("Show BTC Price?", value=True)
 
+    # NEW CHECKBOX: Plot BTC Price on same axis or secondary axis
+    same_axis_checkbox = st.checkbox("Plot BTC Price on the same Y-axis as Indicators?", value=False)
+
     # Color Pickers
     st.markdown("---")
     st.markdown("**Colors**")
@@ -198,9 +199,6 @@ with control_container:
 #########################
 plot_container = st.container()
 with plot_container:
-    # We automatically run as soon as any widget is changed.
-    # No "Plot Data" button required.
-
     if not selected_columns:
         st.warning("Please select at least one indicator column.")
         st.stop()
@@ -259,9 +257,11 @@ with plot_container:
             merged_df[f"EMA_{col}"] = merged_df[col].ewm(span=ema_period).mean()
 
     # Build Plotly Figure
+    # Always create the figure with a secondary axis, but we'll decide
+    # whether to plot BTC price on the secondary or the primary axis
     fig = make_subplots(specs=[[{"secondary_y": True}]])
     
-    # Plot each indicator on left axis
+    # Plot each indicator on the left axis
     for col in selected_columns:
         if chart_type_indicators == "Line":
             fig.add_trace(
@@ -297,8 +297,11 @@ with plot_container:
                 secondary_y=False
             )
 
-    # BTC Price on right axis (if enabled)
+    # BTC Price
     if show_btc_price and not btc_price_df.empty:
+        # Decide which axis to use based on checkbox
+        price_secondary_y = (not same_axis_checkbox)
+
         if chart_type_price == "Line":
             fig.add_trace(
                 go.Scatter(
@@ -308,7 +311,7 @@ with plot_container:
                     name="BTC Price (USD)",
                     line=dict(color=st.session_state["colors"]["BTC_PRICE"]),
                 ),
-                secondary_y=True
+                secondary_y=price_secondary_y
             )
         else:  # Bars
             fig.add_trace(
@@ -318,14 +321,19 @@ with plot_container:
                     name="BTC Price (USD)",
                     marker_color=st.session_state["colors"]["BTC_PRICE"]
                 ),
-                secondary_y=True
+                secondary_y=price_secondary_y
             )
 
-    # Update Layout
+    # Dynamic title
+    if show_btc_price:
+        fig_title = f"{selected_table} vs BTC Price"
+    else:
+        fig_title = f"{selected_table}"
+
     fig.update_layout(
         paper_bgcolor="#000000",
         plot_bgcolor="#000000",
-        title=f"{selected_table} vs BTC Price" if show_btc_price else f"{selected_table}",
+        title=fig_title,
         hovermode="x unified",
         font=dict(color="#f0f2f6"),
         legend=dict(
@@ -336,14 +344,18 @@ with plot_container:
         )
     )
     fig.update_xaxes(title_text="Date", gridcolor="#4f5b66")
+
+    # Left Y-axis
     fig.update_yaxes(
         title_text="Indicator Value",
         type="log" if scale_option_indicator == "Log" else "linear",
         secondary_y=False,
         gridcolor="#4f5b66"
     )
+
+    # Right Y-axis (only used if same_axis_checkbox is False)
     fig.update_yaxes(
-        title_text="BTC Price (USD)",
+        title_text="BTC Price (USD)" if not same_axis_checkbox else "",
         type="log" if scale_option_price == "Log" else "linear",
         secondary_y=True,
         gridcolor="#4f5b66"
