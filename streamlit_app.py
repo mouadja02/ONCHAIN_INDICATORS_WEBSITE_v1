@@ -71,8 +71,6 @@ TABLE_DICT = {
         "table_name": "BTC_DATA.DATA.NUPL",
         "date_col": "DATE",  # DATE
         "numeric_cols": [
-            "MARKET_CAP_USD",
-            "REALIZED_CAP_USD",
             "NUPL",
             "NUPL_PERCENT"
         ]
