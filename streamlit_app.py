@@ -51,7 +51,6 @@ TABLE_DICT = {
         "date_col": "DATE",  # VARCHAR(16777216), can cast to DATE
         "numeric_cols": [
             "REALIZED_CAP_USD",
-            "TOTAL_UNSPENT_BTC",
             "REALIZED_PRICE_USD"
         ]
     },
@@ -60,18 +59,11 @@ TABLE_DICT = {
         "date_col": "DATE",  # TIMESTAMP_NTZ(9)
         "numeric_cols": ["CDD_RAW", "CDD_30_DMA", "CDD_90_DMA"]
     },
-    "EXCHANGE_FLOWS": {
-        "table_name": "BTC_DATA.DATA.EXCHANGE_FLOWS",
-        "date_col": "DATE",  # TIMESTAMP_NTZ(9)
-        "numeric_cols": ["INFLOWS_BTC", "OUTFLOWS_BTC", "NETFLOW_BTC"]
-    },
+
     "MVRV": {
         "table_name": "BTC_DATA.DATA.MVRV",
         "date_col": "DATE",  # DATE
         "numeric_cols": [
-            "REALIZED_CAP_USD",
-            "TOTAL_UNSPENT_BTC",
-            "MARKET_CAP_USD",
             "MVRV"
         ]
     },
@@ -83,6 +75,14 @@ TABLE_DICT = {
             "REALIZED_CAP_USD",
             "NUPL",
             "NUPL_PERCENT"
+        ]
+    },
+    "REALIZED_CAP_VS_MARKET_CAP": {
+        "table_name": "BTC_DATA.DATA.REALIZED_CAP_VS_MARKET_CAP",
+        "date_col": "DATE",  # DATE
+        "numeric_cols": [
+            "MARKET_CAP_USD",
+            "REALIZED_CAP_USD"
         ]
     },
     "TX_COUNT": {
@@ -100,7 +100,6 @@ TABLE_DICT = {
         "date_col": "CREATED_TIMESTAMP",  # TIMESTAMP_NTZ(9)
         "numeric_cols": ["BTC_VALUE"]
     },
-    # >>> NEW ENTRY FOR PUELL_MULTIPLE <<<
     "PUELL_MULTIPLE": {
         "table_name": "BTC_DATA.DATA.PUELL_MULTIPLE",
         "date_col": "DATE",  # DATE
