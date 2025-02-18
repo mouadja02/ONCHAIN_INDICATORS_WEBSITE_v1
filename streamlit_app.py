@@ -119,6 +119,29 @@ BTC_PRICE_TABLE = "BTC_DATA.DATA.BTC_PRICE_USD"
 BTC_PRICE_DATE_COL = "DATE"
 BTC_PRICE_VALUE_COL = "BTC_PRICE_USD"
 
+# (NEW) Maps for aggregator and time bucketing
+AGGREGATOR_MAP = {
+    "None": None,
+    "Count": "COUNT",
+    "Min": "MIN",
+    "Max": "MAX",
+    "Sum": "SUM",
+    "Median": "APPROX_PERCENTILE",  # or MEDIAN if your Snowflake version supports it
+    "Average": "AVG",
+}
+
+BUCKETING_MAP = {
+    "None": None,
+    "Second": "SECOND",
+    "Minute": "MINUTE",
+    "Hour": "HOUR",
+    "Day": "DAY",
+    "Week": "WEEK",
+    "Month": "MONTH",
+    "Quarter": "QUARTER",
+    "Year": "YEAR",
+}
+
 # 5) Page Title
 st.title("Bitcoin On-chain Indicators Dashboard")
 
@@ -143,6 +166,24 @@ with control_container:
         all_numeric_cols,
         default=all_numeric_cols,
         help="Pick one or more numeric columns to plot on the left axis."
+    )
+
+    # (NEW) Aggregation for numeric columns
+    agg_options = ["None", "Count", "Min", "Max", "Sum", "Median", "Average"]
+    selected_agg = st.selectbox(
+        "Aggregation (Y-Axis)",
+        agg_options,
+        index=0,
+        help="Choose how to aggregate numeric columns."
+    )
+
+    # (NEW) Bucketing for date/time
+    bucket_options = ["None","Second","Minute","Hour","Day","Week","Month","Quarter","Year"]
+    selected_bucket = st.selectbox(
+        "Date Bucketing (X-Axis)",
+        bucket_options,
+        index=3,  # 'Day' by default
+        help="Choose how to bucket time intervals."
     )
 
     # Axis Scales & Chart Types
@@ -205,6 +246,113 @@ with plot_container:
         st.warning("Please select at least one indicator column.")
         st.stop()
 
+    #######################
+    # (NEW) BUILD QUERY
+    #######################
+    date_col = table_info["date_col"]
+    numeric_cols = selected_columns
+
+    # 1) Build date bucketing expression
+    if selected_bucket == "None":
+        # No bucketing, just CAST to DATE
+        date_expr = f"CAST({date_col} AS DATE)"
+        group_by_date = False
+    else:
+        # Use DATE_TRUNC
+        bucket_unit = BUCKETING_MAP[selected_bucket]  # e.g. 'WEEK','MONTH', ...
+        date_expr = f"DATE_TRUNC('{bucket_unit}', {date_col})"
+        group_by_date = True
+
+    # We'll rename that truncated date to IND_DATE
+    date_select_expr = f"{date_expr} AS IND_DATE"
+
+    # 2) Build aggregator expressions for each numeric col
+    aggregator = AGGREGATOR_MAP[selected_agg]  # e.g. 'SUM','AVG', ...
+    select_list = []
+    group_by_list = []
+
+    # The date expression is always in SELECT
+    select_list.append(date_select_expr)
+    if group_by_date:
+        # We'll group by the truncated date
+        group_by_list.append("IND_DATE")
+
+    if aggregator is None or aggregator == "None":
+        # No aggregator => we keep the original columns as is
+        # (But if we have date bucketing, do we need aggregator? Usually yes, but user asked for "None")
+        # We'll do the columns raw, but that means multiple rows per day if no aggregator is used.
+        # That is feasible, but might produce lots of data...
+        for col in numeric_cols:
+            select_list.append(col)
+        # If user selected a bucket but no aggregator => multiple rows get same IND_DATE
+        # We'll not group by columns => no GROUP BY except date if user insisted on a bucket
+        # Not typical, but let's allow it.
+    else:
+        # Aggregator is chosen (MIN,MAX,SUM,AVG,APPROX_PERCENTILE,...)
+        for col in numeric_cols:
+            if selected_agg == "Count":
+                # For COUNT, we might do COUNT(*) for all numeric columns, or COUNT(col).
+                # We'll do a trick: COUNT(col) => name it col for each column.
+                agg_expr = f"COUNT({col}) AS {col}"
+            elif selected_agg == "Median":
+                # For median, we do APPROX_PERCENTILE(col,0.5)
+                agg_expr = f"APPROX_PERCENTILE({col}, 0.5) AS {col}"
+            else:
+                # e.g. SUM(col) AS col
+                agg_expr = f"{aggregator}({col}) AS {col}"
+            select_list.append(agg_expr)
+
+    # 3) Build the FROM/WHERE/ORDER
+    base_table = table_info['table_name']
+    where_clause = f"CAST({date_col} AS DATE) >= '{selected_start_date}'"
+    order_clause = "ORDER BY IND_DATE"
+
+    # 4) Combine the query
+    # Example: SELECT DATE_TRUNC('DAY', BLOCK_TIMESTAMP) AS IND_DATE, SUM(TX_COUNT) as TX_COUNT
+    #          FROM ...
+    #          WHERE date >= ...
+    #          GROUP BY IND_DATE
+    #          ORDER BY IND_DATE
+    select_part = ", ".join(select_list)
+    group_by_part = ""
+    if group_by_date and aggregator is not None and aggregator != "None":
+        group_by_part = f"GROUP BY IND_DATE"
+    elif group_by_date and (aggregator is None or aggregator == "None"):
+        # user wants bucketed date but no aggregator => group by the truncated date + the original columns?
+        # Actually that doesn't make sense for the numeric columns. We'll just group by IND_DATE
+        # to avoid duplicates. Or we do no aggregator => we won't group. We'll allow duplicates.
+        group_by_part = ""  # keep it empty => you'll get multiple rows with same IND_DATE
+        order_clause = "ORDER BY IND_DATE, " + ", ".join(numeric_cols)
+    else:
+        # aggregator is chosen, but user selected "None" for bucket => no group by
+        pass
+
+    final_query = f"""
+        SELECT
+            {select_part}
+        FROM {base_table}
+        WHERE {where_clause}
+        {group_by_part}
+        {order_clause}
+    """
+
+    st.write("**Generated Query:**")
+    st.code(final_query, language="sql")
+
+    # 5) Execute and get DataFrame
+    df = session.sql(final_query).to_pandas()
+
+    # Rename IND_DATE -> DATE for plotting
+    if "IND_DATE" in df.columns:
+        df.rename(columns={"IND_DATE": "DATE"}, inplace=True)
+    else:
+        # If aggregator= None, bucketing= None => we have no IND_DATE
+        df.rename(columns={f"CAST({date_col} AS DATE)": "DATE"}, inplace=True, errors="ignore")
+
+    if df.empty:
+        st.warning("No data returned. Check your date range or aggregator options.")
+        st.stop()
+
     # Query BTC Price if requested
     btc_price_df = pd.DataFrame()
     if show_btc_price:
@@ -220,49 +368,35 @@ with plot_container:
         btc_price_df = session.sql(btc_price_query).to_pandas()
         btc_price_df.rename(columns={"PRICE_DATE": "DATE"}, inplace=True)
 
-    # Query Selected Indicator(s)
-    date_col = table_info["date_col"]
-    columns_for_query = ", ".join(selected_columns)
-    indicator_query = f"""
-        SELECT
-            CAST({date_col} AS DATE) AS IND_DATE,
-            {columns_for_query}
-        FROM {table_info['table_name']}
-        WHERE CAST({date_col} AS DATE) >= '{selected_start_date}'
-        ORDER BY IND_DATE
-    """
-    indicator_df = session.sql(indicator_query).to_pandas()
-    indicator_df.rename(columns={"IND_DATE": "DATE"}, inplace=True)
-
-    if indicator_df.empty and btc_price_df.empty:
-        st.warning("No data returned. Check your date range or table.")
-        st.stop()
-
-    # Merge if BTC Price is shown
+    # Merge with BTC price
     if show_btc_price and not btc_price_df.empty:
         merged_df = pd.merge(
             btc_price_df,
-            indicator_df,
+            df,
             on="DATE",
             how="inner"
         )
     else:
-        merged_df = indicator_df
+        merged_df = df
 
     if merged_df.empty:
         st.warning("No overlapping data in the selected date range.")
         st.stop()
 
     # EMA Calculation
-    if show_ema:
-        for col in selected_columns:
-            merged_df[f"EMA_{col}"] = merged_df[col].ewm(span=ema_period).mean()
+    if show_ema and aggregator != "Count":
+        # If aggregator = Count => data is integers, still possible to do EMA but may or may not be relevant
+        for col in numeric_cols:
+            if col in merged_df.columns:
+                merged_df[f"EMA_{col}"] = merged_df[col].ewm(span=ema_period).mean()
 
     # Build Plotly Figure
     fig = make_subplots(specs=[[{"secondary_y": True}]])
     
     # Plot each indicator on left axis
-    for col in selected_columns:
+    for col in numeric_cols:
+        if col not in merged_df.columns:
+            continue  # aggregator might have changed the col name or it's Count => single col?
         if chart_type_indicators == "Line":
             fig.add_trace(
                 go.Scatter(
@@ -284,7 +418,8 @@ with plot_container:
                 ),
                 secondary_y=False
             )
-        if show_ema:
+        # If show_ema => plot the EMA for that col
+        if show_ema and f"EMA_{col}" in merged_df.columns:
             fig.add_trace(
                 go.Scatter(
                     x=merged_df["DATE"],
@@ -335,7 +470,7 @@ with plot_container:
             orientation="h"
         )
     )
-    fig.update_xaxes(title_text="Date", gridcolor="#4f5b66")
+    fig.update_xaxes(title_text="Date / Time", gridcolor="#4f5b66")
     fig.update_yaxes(
         title_text="Indicator Value",
         type="log" if scale_option_indicator == "Log" else "linear",
