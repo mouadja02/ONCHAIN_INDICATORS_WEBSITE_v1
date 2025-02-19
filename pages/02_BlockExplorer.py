@@ -87,9 +87,9 @@ def show_transaction_details(tx_hash, tx_id):
     inputs_query = f"""
         SELECT
             TX_ID,
-            SRC_TX_HASH,
-            SRC_OUTPUT_INDEX,
-            INPUT_SATS
+            SPENT_TX_ID,
+            SPENT_OUTPUT_INDEX,
+            VALUE_SATS
         FROM BITCOIN_ONCHAIN_CORE_DATA.CORE.FACT_INPUTS
         WHERE TX_ID = '{tx_id}'
         LIMIT 50
