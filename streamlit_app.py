@@ -1,15 +1,15 @@
 import streamlit as st
 
 st.set_page_config(
-    page_title="Bitcoin On-chain App",
+    page_title="Application Bitcoin On-chain",
     layout="wide",
     initial_sidebar_state="expanded"
 )
 
-st.title("Welcome to My Bitcoin On-chain App")
+st.title("Bienvenue sur mon application Bitcoin On-chain")
 
 st.write("""
-Use the sidebar to explore:
-- OnChainVitals (displays on-chain indicators).
-- BlockchainScope (browse blocks and transactions).
+Utilisez la barre latérale pour explorer :
+- OnChainVitals (affiche des indicateurs on-chain).
+- BlockchainScope (explorer les blocs et les transactions).
 """)
