@@ -44,7 +44,7 @@ def show_block_details(block_number):
             INPUT_COUNT,
             OUTPUT_COUNT,
             OUTPUT_VALUE_SATS,
-            FEE_SATS
+            FEE
         FROM BITCOIN_ONCHAIN_CORE_DATA.CORE.FACT_TRANSACTIONS
         WHERE BLOCK_NUMBER = {block_number}
         ORDER BY TX_ID
@@ -73,7 +73,7 @@ def show_transaction_details(tx_hash, tx_id):
             INPUT_COUNT,
             OUTPUT_COUNT,
             OUTPUT_VALUE_SATS,
-            FEE_SATS
+            FEE
         FROM BITCOIN_ONCHAIN_CORE_DATA.CORE.FACT_TRANSACTIONS
         WHERE TX_HASH = '{tx_hash}'
         LIMIT 1
@@ -184,7 +184,7 @@ else:
                 INPUT_COUNT,
                 OUTPUT_COUNT,
                 OUTPUT_VALUE_SATS,
-                FEE_SATS
+                FEE
             FROM BITCOIN_ONCHAIN_CORE_DATA.CORE.FACT_TRANSACTIONS
             WHERE TX_HASH = '{search_input}'
             LIMIT 1
