@@ -10,6 +10,6 @@ st.title("Welcome to My Bitcoin On-chain App")
 
 st.write("""
 Use the sidebar to explore:
-- Charts (displays on-chain indicators).
-- Block Explorer (browse blocks and transactions).
+- OnChainVitals (displays on-chain indicators).
+- BlockchainScope (browse blocks and transactions).
 """)
