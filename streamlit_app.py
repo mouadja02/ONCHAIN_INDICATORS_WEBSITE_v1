@@ -1,12 +1,12 @@
 import streamlit as st
 
 st.set_page_config(
-    page_title="Application Bitcoin On-chain",
+    page_title="Bitcoin On-Chain App",
     layout="wide",
     initial_sidebar_state="expanded"
 )
 
-st.title("Bienvenue sur mon application Bitcoin On-chain")
+st.title("Bienvenue sur mon application Bitcoin On-chain Explorer")
 
 st.write("""
 Utilisez la barre latérale pour explorer :
