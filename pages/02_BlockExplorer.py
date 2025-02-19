@@ -124,7 +124,7 @@ if not search_input:
             BLOCK_NUMBER,
             BLOCK_HASH,
             BLOCK_TIMESTAMP,
-            BLOCK_SIZE,
+            SIZE,
             TX_COUNT
         FROM BITCOIN_ONCHAIN_CORE_DATA.CORE.FACT_BLOCKS
         ORDER BY BLOCK_NUMBER DESC
