@@ -18,7 +18,7 @@ st.write("**Search by block number, block hash, TX_ID, or TX_HASH.**")
 search_input = st.text_input("Enter a value to search:")
 
 def show_block_details(block_number):
-    st.subheader(f"Block #{block_number} Details")
+    st.subheader(f"Block #'{block_number}' Details")
 
     query_block = f"""
         SELECT 
@@ -28,7 +28,7 @@ def show_block_details(block_number):
             SIZE,
             TX_COUNT
         FROM BITCOIN_ONCHAIN_CORE_DATA.CORE.FACT_BLOCKS
-        WHERE BLOCK_NUMBER = {block_number}
+        WHERE BLOCK_NUMBER = '{block_number}'
         LIMIT 1
     """
     block_df = session.sql(query_block).to_pandas()
@@ -46,7 +46,7 @@ def show_block_details(block_number):
             OUTPUT_VALUE_SATS,
             FEE
         FROM BITCOIN_ONCHAIN_CORE_DATA.CORE.FACT_TRANSACTIONS
-        WHERE BLOCK_NUMBER = {block_number}
+        WHERE BLOCK_NUMBER = '{block_number}'
         ORDER BY TX_ID
         LIMIT 50
     """
@@ -103,9 +103,8 @@ def show_transaction_details(tx_hash, tx_id):
     outputs_query = f"""
         SELECT
             TX_ID,
-            OUTPUT_INDEX,
-            OUTPUT_SATS,
-            OUTPUT_TYPE
+            INDEX,
+            VALUE_SATS
         FROM BITCOIN_ONCHAIN_CORE_DATA.CORE.FACT_OUTPUTS
         WHERE TX_ID = '{tx_id}'
         LIMIT 50
