@@ -94,6 +94,7 @@ def show_transaction_details(tx_hash, tx_id):
         WHERE TX_ID = {tx_id}
         LIMIT 50
     """
+    print(inputs_query)
     inputs_df = session.sql(inputs_query).to_pandas()
     if not inputs_df.empty:
         st.write("**Transaction Inputs (first 50)**")
