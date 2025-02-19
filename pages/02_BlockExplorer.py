@@ -43,7 +43,7 @@ def show_block_details(block_number):
             TX_HASH,
             INPUT_COUNT,
             OUTPUT_COUNT,
-            TOTAL_OUTPUT_SATS,
+            OUTPUT_VALUE_SATS,
             FEE_SATS
         FROM BITCOIN_ONCHAIN_CORE_DATA.CORE.FACT_TRANSACTIONS
         WHERE BLOCK_NUMBER = {block_number}
@@ -72,7 +72,7 @@ def show_transaction_details(tx_hash, tx_id):
             TX_HASH,
             INPUT_COUNT,
             OUTPUT_COUNT,
-            TOTAL_OUTPUT_SATS,
+            OUTPUT_VALUE_SATS,
             FEE_SATS
         FROM BITCOIN_ONCHAIN_CORE_DATA.CORE.FACT_TRANSACTIONS
         WHERE TX_HASH = '{tx_hash}'
@@ -183,7 +183,7 @@ else:
                 BLOCK_NUMBER,
                 INPUT_COUNT,
                 OUTPUT_COUNT,
-                TOTAL_OUTPUT_SATS,
+                OUTPUT_VALUE_SATS,
                 FEE_SATS
             FROM BITCOIN_ONCHAIN_CORE_DATA.CORE.FACT_TRANSACTIONS
             WHERE TX_HASH = '{search_input}'
