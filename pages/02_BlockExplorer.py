@@ -91,10 +91,9 @@ def show_transaction_details(tx_hash, tx_id):
             SRC_OUTPUT_INDEX,
             INPUT_SATS
         FROM BITCOIN_ONCHAIN_CORE_DATA.CORE.FACT_INPUTS
-        WHERE TX_ID = {tx_id}
+        WHERE TX_ID = '{tx_id}'
         LIMIT 50
     """
-    print(inputs_query)
     inputs_df = session.sql(inputs_query).to_pandas()
     if not inputs_df.empty:
         st.write("**Transaction Inputs (first 50)**")
@@ -108,7 +107,7 @@ def show_transaction_details(tx_hash, tx_id):
             OUTPUT_SATS,
             OUTPUT_TYPE
         FROM BITCOIN_ONCHAIN_CORE_DATA.CORE.FACT_OUTPUTS
-        WHERE TX_ID = {tx_id}
+        WHERE TX_ID = '{tx_id}'
         LIMIT 50
     """
     outputs_df = session.sql(outputs_query).to_pandas()
