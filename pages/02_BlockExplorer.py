@@ -25,7 +25,7 @@ def show_block_details(block_number):
             BLOCK_NUMBER,
             BLOCK_HASH,
             BLOCK_TIMESTAMP,
-            BLOCK_SIZE,
+            SIZE,
             TX_COUNT
         FROM BITCOIN_ONCHAIN_CORE_DATA.CORE.FACT_BLOCKS
         WHERE BLOCK_NUMBER = {block_number}
@@ -148,7 +148,7 @@ else:
                 BLOCK_NUMBER,
                 BLOCK_HASH,
                 BLOCK_TIMESTAMP,
-                BLOCK_SIZE,
+                SIZE,
                 TX_COUNT
             FROM BITCOIN_ONCHAIN_CORE_DATA.CORE.FACT_BLOCKS
             WHERE BLOCK_NUMBER = {int(search_input)}
@@ -168,7 +168,7 @@ else:
                 BLOCK_NUMBER,
                 BLOCK_HASH,
                 BLOCK_TIMESTAMP,
-                BLOCK_SIZE,
+                SIZE,
                 TX_COUNT
             FROM BITCOIN_ONCHAIN_CORE_DATA.CORE.FACT_BLOCKS
             WHERE BLOCK_HASH = '{search_input}'
