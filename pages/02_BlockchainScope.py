@@ -93,7 +93,7 @@ def show_transaction_details(tx_hash, tx_id):
             IS_COINBASE
         FROM BITCOIN_ONCHAIN_CORE_DATA.CORE.FACT_TRANSACTIONS
         WHERE TX_HASH = '{tx_hash}'
-        LIMIT 1
+        ORDER BY IS_COINBASE DESC LIMIT 10
     """
     tx_info_df = session.sql(tx_info_query).to_pandas()
     if not tx_info_df.empty:
