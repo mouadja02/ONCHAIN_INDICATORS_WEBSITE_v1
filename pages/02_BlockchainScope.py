@@ -54,12 +54,28 @@ def show_block_details(block_number):
     st.write("**Transactions in this block (first 50):**")
     st.dataframe(tx_df, use_container_width=True)
 
-    if not tx_df.empty:
-        tx_hashes = tx_df["TX_HASH"].tolist()
-        selected_tx_hash = st.selectbox("Select a transaction to view details:", tx_hashes)
-        if selected_tx_hash:
-            selected_tx_id = tx_df.loc[tx_df["TX_HASH"] == selected_tx_hash, "TX_ID"].iloc[0]
-            show_transaction_details(selected_tx_hash, selected_tx_id)
+    # ─────────────────────────────────────────────────────────────────────────────
+    # NEW: Search bar to lookup a transaction by TX_HASH within this block
+    # ─────────────────────────────────────────────────────────────────────────────
+    tx_search = st.text_input("Search transaction in this block by TX_HASH:")
+    if tx_search:
+        # Check if the user-entered TX_HASH exists in tx_df
+        if tx_search in tx_df["TX_HASH"].values:
+            st.success(f"Transaction found: {tx_search}")
+            # Get the matching TX_ID
+            selected_tx_id = tx_df.loc[tx_df["TX_HASH"] == tx_search, "TX_ID"].iloc[0]
+            show_transaction_details(tx_search, selected_tx_id)
+        else:
+            st.error(f"No transaction with hash {tx_search} found in this block.")
+    else:
+        # If no search input is provided, use the existing selectbox approach
+        if not tx_df.empty:
+            tx_hashes = tx_df["TX_HASH"].tolist()
+            selected_tx_hash = st.selectbox("Select a transaction to view details:", tx_hashes)
+            if selected_tx_hash:
+                selected_tx_id = tx_df.loc[tx_df["TX_HASH"] == selected_tx_hash, "TX_ID"].iloc[0]
+                show_transaction_details(selected_tx_hash, selected_tx_id)
+
 
 def show_transaction_details(tx_hash, tx_id):
     st.subheader(f"Transaction details for {tx_hash}")
@@ -140,9 +156,7 @@ if not search_input:
         if selected_block:
             show_block_details(selected_block)
 else:
-    # Try to detect if it's a block number or a hash
     if search_input.isdigit():
-        # Try block_number
         query_block = f"""
             SELECT 
                 BLOCK_NUMBER,
@@ -162,7 +176,6 @@ else:
         else:
             st.error(f"No block found for block_number = {search_input}")
     else:
-        # Try block hash or tx hash
         block_hash_query = f"""
             SELECT 
                 BLOCK_NUMBER,
