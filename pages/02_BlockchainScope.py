@@ -54,28 +54,12 @@ def show_block_details(block_number):
     st.write("**Transactions in this block (first 50):**")
     st.dataframe(tx_df, use_container_width=True)
 
-    # ─────────────────────────────────────────────────────────────────────────────
-    # NEW: Search bar to lookup a transaction by TX_HASH within this block
-    # ─────────────────────────────────────────────────────────────────────────────
-    tx_search = st.text_input("Search transaction in this block by TX_HASH:")
-    if tx_search:
-        # Check if the user-entered TX_HASH exists in tx_df
-        if tx_search in tx_df["TX_HASH"].values:
-            st.success(f"Transaction found: {tx_search}")
-            # Get the matching TX_ID
-            selected_tx_id = tx_df.loc[tx_df["TX_HASH"] == tx_search, "TX_ID"].iloc[0]
-            show_transaction_details(tx_search, selected_tx_id)
-        else:
-            st.error(f"No transaction with hash {tx_search} found in this block.")
-    else:
-        # If no search input is provided, use the existing selectbox approach
-        if not tx_df.empty:
-            tx_hashes = tx_df["TX_HASH"].tolist()
-            selected_tx_hash = st.selectbox("Select a transaction to view details:", tx_hashes)
-            if selected_tx_hash:
-                selected_tx_id = tx_df.loc[tx_df["TX_HASH"] == selected_tx_hash, "TX_ID"].iloc[0]
-                show_transaction_details(selected_tx_hash, selected_tx_id)
-
+    if not tx_df.empty:
+        tx_hashes = tx_df["TX_HASH"].tolist()
+        selected_tx_hash = st.selectbox("Select a transaction to view details:", tx_hashes)
+        if selected_tx_hash:
+            selected_tx_id = tx_df.loc[tx_df["TX_HASH"] == selected_tx_hash, "TX_ID"].iloc[0]
+            show_transaction_details(selected_tx_hash, selected_tx_id)
 
 def show_transaction_details(tx_hash, tx_id):
     st.subheader(f"Transaction details for {tx_hash}")
@@ -93,7 +77,8 @@ def show_transaction_details(tx_hash, tx_id):
             IS_COINBASE
         FROM BITCOIN_ONCHAIN_CORE_DATA.CORE.FACT_TRANSACTIONS
         WHERE TX_HASH = '{tx_hash}'
-        ORDER BY IS_COINBASE DESC LIMIT 10
+        ORDER BY IS_COINBASE DESC
+        LIMIT 10
     """
     tx_info_df = session.sql(tx_info_query).to_pandas()
     if not tx_info_df.empty:
@@ -109,6 +94,7 @@ def show_transaction_details(tx_hash, tx_id):
             VALUE_SATS
         FROM BITCOIN_ONCHAIN_CORE_DATA.CORE.FACT_INPUTS
         WHERE TX_ID = '{tx_id}'
+        GROUP BY TX_ID
         LIMIT 50
     """
     inputs_df = session.sql(inputs_query).to_pandas()
@@ -124,6 +110,7 @@ def show_transaction_details(tx_hash, tx_id):
             VALUE_SATS
         FROM BITCOIN_ONCHAIN_CORE_DATA.CORE.FACT_OUTPUTS
         WHERE TX_ID = '{tx_id}'
+        GROUP BY TX_ID
         LIMIT 50
     """
     outputs_df = session.sql(outputs_query).to_pandas()
