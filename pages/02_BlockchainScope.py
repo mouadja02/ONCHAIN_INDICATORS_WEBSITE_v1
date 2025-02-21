@@ -14,12 +14,17 @@ cx = st.connection("snowflake")
 session = cx.session()
 
 # Search bar
-st.write("**Search by block number, block hash, or TX_HASH.**")
+st.write("**Search by block number, block hash, or TX_ID.**")
 search_input = st.text_input("Enter a value to search:")
 
 def show_block_details(block_number):
+    """
+    Display block info for a given block_number, and list transactions
+    by TX_ID (coinbase first). Also allow user to pick a TX_ID to see its details.
+    """
     st.subheader(f"Block #'{block_number}' Details")
 
+    # Query block info
     query_block = f"""
         SELECT 
             BLOCK_NUMBER,
@@ -36,6 +41,7 @@ def show_block_details(block_number):
         st.write("**Block Info**")
         st.dataframe(block_df)
 
+    # Query transactions for this block, focusing on TX_ID, ignoring TX_HASH
     tx_query = f"""
         SELECT 
             TX_ID,
@@ -54,18 +60,21 @@ def show_block_details(block_number):
     st.write("**Transactions in this block (coinbase first, showing up to 50):**")
     st.dataframe(tx_df, use_container_width=True)
 
+    # Allow user to pick a TX_ID from a selectbox
     if not tx_df.empty:
-        tx_hashes = tx_df["TX_ID"].tolist()
-        selected_tx_hash = st.selectbox("Select a transaction to view details:", tx_hashes)
-        if selected_tx_hash:
-            selected_tx_id = tx_df.loc[tx_df["TX_ID"] == selected_tx_hash, "TX_ID"].iloc[0]
-            show_transaction_details(selected_tx_hash, selected_tx_id)
-
+        tx_ids = tx_df["TX_ID"].tolist()
+        selected_tx_id = st.selectbox("Select a transaction to view details:", tx_ids)
+        if selected_tx_id:
+            show_transaction_details(selected_tx_id)
 
 def show_transaction_details(tx_id):
-    st.subheader(f"Transaction details for {tx_hash}")
+    """
+    Display details for a single transaction (identified only by TX_ID).
+    Includes transaction-level info plus inputs/outputs.
+    """
+    st.subheader(f"Transaction details for TX_ID: {tx_id}")
 
-    # Basic tx info
+    # Query transaction info
     tx_info_query = f"""
         SELECT
             BLOCK_NUMBER,
@@ -85,7 +94,7 @@ def show_transaction_details(tx_id):
         st.write("**Transaction Info**")
         st.dataframe(tx_info_df)
 
-    # Inputs
+    # Query inputs
     inputs_query = f"""
         SELECT
             TX_ID,
@@ -101,7 +110,7 @@ def show_transaction_details(tx_id):
         st.write("**Transaction Inputs (first 50)**")
         st.dataframe(inputs_df, use_container_width=True)
 
-    # Outputs
+    # Query outputs
     outputs_query = f"""
         SELECT
             TX_ID,
@@ -116,9 +125,12 @@ def show_transaction_details(tx_id):
         st.write("**Transaction Outputs (first 50)**")
         st.dataframe(outputs_df, use_container_width=True)
 
+# ─────────────────────────────────────────────────────────────────────────────
 # Main logic for this page
+# ─────────────────────────────────────────────────────────────────────────────
+
 if not search_input:
-    # Show latest 10 blocks
+    # If no search input, show latest 10 blocks
     st.subheader("Latest Blocks")
     latest_blocks_query = """
         SELECT 
@@ -140,8 +152,11 @@ if not search_input:
         selected_block = st.selectbox("Select a block to view details:", block_nums)
         if selected_block:
             show_block_details(selected_block)
+
 else:
+    # If there's search input, attempt to interpret it.
     if search_input.isdigit():
+        # Possibly a block_number
         query_block = f"""
             SELECT 
                 BLOCK_NUMBER,
@@ -161,6 +176,7 @@ else:
         else:
             st.error(f"No block found for block_number = {search_input}")
     else:
+        # Possibly a block hash or a TX_ID
         block_hash_query = f"""
             SELECT 
                 BLOCK_NUMBER,
@@ -174,10 +190,9 @@ else:
         """
         df_block = session.sql(block_hash_query).to_pandas()
 
-        tx_hash_query = f"""
+        tx_id_query = f"""
             SELECT 
                 TX_ID,
-                TX_HASH,
                 BLOCK_NUMBER,
                 INPUT_COUNT,
                 OUTPUT_COUNT,
@@ -187,17 +202,18 @@ else:
             WHERE TX_ID = '{search_input}'
             LIMIT 1
         """
-        df_tx = session.sql(tx_hash_query).to_pandas()
+        df_tx = session.sql(tx_id_query).to_pandas()
 
         if not df_block.empty:
+            # Found a block matching that hash
             block_num = df_block["BLOCK_NUMBER"].iloc[0]
             st.success(f"Found block with hash = {search_input}")
             st.dataframe(df_block)
             show_block_details(block_num)
         elif not df_tx.empty:
-            st.success(f"Found transaction with hash = {search_input}")
+            # Found a transaction matching that TX_ID
+            st.success(f"Found transaction with TX_ID = {search_input}")
             st.dataframe(df_tx)
-            tx_id = df_tx["TX_ID"].iloc[0]
-            show_transaction_details(search_input, tx_id)
+            show_transaction_details(search_input)
         else:
             st.error(f"No block or transaction found matching {search_input}.")
