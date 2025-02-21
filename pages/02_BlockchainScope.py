@@ -94,7 +94,6 @@ def show_transaction_details(tx_hash, tx_id):
             VALUE_SATS
         FROM BITCOIN_ONCHAIN_CORE_DATA.CORE.FACT_INPUTS
         WHERE TX_ID = '{tx_id}'
-        GROUP BY TX_ID
         LIMIT 50
     """
     inputs_df = session.sql(inputs_query).to_pandas()
@@ -110,7 +109,6 @@ def show_transaction_details(tx_hash, tx_id):
             VALUE_SATS
         FROM BITCOIN_ONCHAIN_CORE_DATA.CORE.FACT_OUTPUTS
         WHERE TX_ID = '{tx_id}'
-        GROUP BY TX_ID
         LIMIT 50
     """
     outputs_df = session.sql(outputs_query).to_pandas()
