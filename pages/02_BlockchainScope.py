@@ -37,6 +37,7 @@ def show_block_details(block_number):
         st.dataframe(block_df)
 
     # Show transactions in this block
+    # >>> SORT BY IS_COINBASE DESC to put the coinbase transaction first <<<
     tx_query = f"""
         SELECT 
             TX_ID,
@@ -44,14 +45,16 @@ def show_block_details(block_number):
             INPUT_COUNT,
             OUTPUT_COUNT,
             OUTPUT_VALUE_SATS,
-            FEE
+            FEE,
+            IS_COINBASE
         FROM BITCOIN_ONCHAIN_CORE_DATA.CORE.FACT_TRANSACTIONS
         WHERE BLOCK_NUMBER = '{block_number}'
-        ORDER BY TX_ID
+        ORDER BY IS_COINBASE DESC, TX_ID  -- Coinbase first, then sorted by TX_ID
         LIMIT 50
     """
     tx_df = session.sql(tx_query).to_pandas()
-    st.write("**Transactions in this block (first 50):**")
+
+    st.write("**Transactions in this block (coinbase first, showing up to 50):**")
     st.dataframe(tx_df, use_container_width=True)
 
     if not tx_df.empty:
@@ -60,6 +63,7 @@ def show_block_details(block_number):
         if selected_tx_hash:
             selected_tx_id = tx_df.loc[tx_df["TX_HASH"] == selected_tx_hash, "TX_ID"].iloc[0]
             show_transaction_details(selected_tx_hash, selected_tx_id)
+
 
 def show_transaction_details(tx_hash, tx_id):
     st.subheader(f"Transaction details for {tx_hash}")
