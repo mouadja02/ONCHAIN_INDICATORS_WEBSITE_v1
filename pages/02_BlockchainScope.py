@@ -73,7 +73,8 @@ def show_transaction_details(tx_hash, tx_id):
             INPUT_COUNT,
             OUTPUT_COUNT,
             OUTPUT_VALUE_SATS,
-            FEE
+            FEE,
+            IS_COINBASE
         FROM BITCOIN_ONCHAIN_CORE_DATA.CORE.FACT_TRANSACTIONS
         WHERE TX_HASH = '{tx_hash}'
         LIMIT 1
