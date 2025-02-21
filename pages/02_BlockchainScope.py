@@ -55,10 +55,10 @@ def show_block_details(block_number):
     st.dataframe(tx_df, use_container_width=True)
 
     if not tx_df.empty:
-        tx_hashes = tx_df["TX_HASH"].tolist()
+        tx_hashes = tx_df["TX_ID"].tolist()
         selected_tx_hash = st.selectbox("Select a transaction to view details:", tx_hashes)
         if selected_tx_hash:
-            selected_tx_id = tx_df.loc[tx_df["TX_HASH"] == selected_tx_hash, "TX_ID"].iloc[0]
+            selected_tx_id = tx_df.loc[tx_df["TX_ID"] == selected_tx_hash, "TX_ID"].iloc[0]
             show_transaction_details(selected_tx_hash, selected_tx_id)
 
 
