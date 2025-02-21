@@ -14,7 +14,7 @@ cx = st.connection("snowflake")
 session = cx.session()
 
 # Search bar
-st.write("**Search by block number, block hash, TX_ID, or TX_HASH.**")
+st.write("**Search by block number, block hash, or TX_HASH.**")
 search_input = st.text_input("Enter a value to search:")
 
 def show_block_details(block_number):
@@ -36,12 +36,9 @@ def show_block_details(block_number):
         st.write("**Block Info**")
         st.dataframe(block_df)
 
-    # Show transactions in this block
-    # >>> SORT BY IS_COINBASE DESC to put the coinbase transaction first <<<
     tx_query = f"""
         SELECT 
             TX_ID,
-            TX_HASH,
             INPUT_COUNT,
             OUTPUT_COUNT,
             OUTPUT_VALUE_SATS,
@@ -49,7 +46,7 @@ def show_block_details(block_number):
             IS_COINBASE
         FROM BITCOIN_ONCHAIN_CORE_DATA.CORE.FACT_TRANSACTIONS
         WHERE BLOCK_NUMBER = '{block_number}'
-        ORDER BY IS_COINBASE DESC, TX_ID  -- Coinbase first, then sorted by TX_ID
+        ORDER BY IS_COINBASE DESC, TX_ID
         LIMIT 50
     """
     tx_df = session.sql(tx_query).to_pandas()
@@ -65,7 +62,7 @@ def show_block_details(block_number):
             show_transaction_details(selected_tx_hash, selected_tx_id)
 
 
-def show_transaction_details(tx_hash, tx_id):
+def show_transaction_details(tx_id):
     st.subheader(f"Transaction details for {tx_hash}")
 
     # Basic tx info
@@ -73,14 +70,13 @@ def show_transaction_details(tx_hash, tx_id):
         SELECT
             BLOCK_NUMBER,
             TX_ID,
-            TX_HASH,
             INPUT_COUNT,
             OUTPUT_COUNT,
             OUTPUT_VALUE_SATS,
             FEE,
             IS_COINBASE
         FROM BITCOIN_ONCHAIN_CORE_DATA.CORE.FACT_TRANSACTIONS
-        WHERE TX_HASH = '{tx_hash}'
+        WHERE TX_ID = '{tx_id}'
         ORDER BY IS_COINBASE DESC
         LIMIT 10
     """
@@ -188,7 +184,7 @@ else:
                 OUTPUT_VALUE_SATS,
                 FEE
             FROM BITCOIN_ONCHAIN_CORE_DATA.CORE.FACT_TRANSACTIONS
-            WHERE TX_HASH = '{search_input}'
+            WHERE TX_ID = '{search_input}'
             LIMIT 1
         """
         df_tx = session.sql(tx_hash_query).to_pandas()
