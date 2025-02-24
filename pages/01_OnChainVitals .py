@@ -68,6 +68,13 @@ TABLE_DICT = {
         "date_col": "DATE",
         "numeric_cols": ["CDD_RAW", "CDD_30_DMA", "CDD_90_DMA"]
     },
+    "EXCHANGE_FLOW" : {
+        "table_name": "BTC_DATA.DATA.EXCHANGE_FLOW",
+        "date_col": "DAY",
+        "numeric_cols": [
+            "INFLOW","OUTFLOW","NETFLOW"
+        ]
+    }
     "MVRV": {
         "table_name": "BTC_DATA.DATA.MVRV",
         "date_col": "DATE",
