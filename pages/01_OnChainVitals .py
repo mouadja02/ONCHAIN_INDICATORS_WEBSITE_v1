@@ -86,6 +86,11 @@ TABLE_DICT = {
             "REALIZED_CAP_USD"
         ]
     },
+    "SOPR": {
+        "table_name": "BTC_DATA.DATA.SOPR",
+        "spent_date": "DATE",
+        "numeric_cols": ["SOPR"]
+    },
     "TX_COUNT": {
         "table_name": "BTC_DATA.DATA.TX_COUNT",
         "date_col": "BLOCK_TIMESTAMP",
