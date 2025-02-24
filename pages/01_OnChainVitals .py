@@ -273,6 +273,7 @@ with plot_container:
     
     # Plot each indicator on the left axis
     for col in selected_columns:
+        print(col)
         if chart_type_indicators == "Line":
             fig.add_trace(
                 go.Scatter(
