@@ -137,8 +137,11 @@ BTC_PRICE_DATE_COL = "DATE"
 BTC_PRICE_VALUE_COL = "BTC_PRICE_USD"
 
 # 4) Page Title
-st.title("Bitcoin On-chain Indicators Dashboard")
+st.title("OnChainVitals - Indicateurs On-chain")
 
+st.write("<div class='container'>", unsafe_allow_html=True)
+
+st.subheader("Chart Controls")
 #########################
 # 5) CONTROLS (TOP)
 #########################
@@ -376,3 +379,5 @@ with plot_container:
     )
 
     st.plotly_chart(fig, use_container_width=True)
+
+st.write("</div>", unsafe_allow_html=True)
