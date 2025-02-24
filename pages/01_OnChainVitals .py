@@ -74,7 +74,7 @@ TABLE_DICT = {
         "numeric_cols": [
             "INFLOW","OUTFLOW","NETFLOW"
         ]
-    }
+    },
     "MVRV": {
         "table_name": "BTC_DATA.DATA.MVRV",
         "date_col": "DATE",
