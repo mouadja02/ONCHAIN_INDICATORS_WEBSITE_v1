@@ -53,7 +53,7 @@ TABLE_DICT = {
     "ADDRESSES_PROFIT_LOSS_PERCENT": {
         "table_name": "BTC_DATA.DATA.ADDRESSES_PROFIT_LOSS_PERCENT",
         "date_col": "sale_date", 
-        "numeric_cols": ["addresses_profit","addresses_loss","percent_profit","percent_loss"]
+        "numeric_cols": ["percent_profit","percent_loss"]
     },
     "BTC_REALIZED_CAP_AND_PRICE": {
         "table_name": "BTC_DATA.DATA.BTC_REALIZED_CAP_AND_PRICE",
