@@ -53,7 +53,7 @@ TABLE_DICT = {
     "ADDRESSES_PROFIT_LOSS_PERCENT": {
         "table_name": "BTC_DATA.DATA.ADDRESSES_PROFIT_LOSS_PERCENT",
         "date_col": "sale_date", 
-        "numeric_cols": ["percent_profit","percent_loss"]
+        "numeric_cols": ["PERECNT_PROFIT","PERCENT_LOSS"]
     },
     "BTC_REALIZED_CAP_AND_PRICE": {
         "table_name": "BTC_DATA.DATA.BTC_REALIZED_CAP_AND_PRICE",
@@ -273,8 +273,6 @@ with plot_container:
     
     # Plot each indicator on the left axis
     for col in selected_columns:
-        print(col)
-        print(merged_df[col])
         if chart_type_indicators == "Line":
             fig.add_trace(
                 go.Scatter(
