@@ -88,7 +88,7 @@ TABLE_DICT = {
     },
     "SOPR": {
         "table_name": "BTC_DATA.DATA.SOPR",
-        "spent_date": "DATE",
+        "date_col": "spent_date",
         "numeric_cols": ["SOPR"]
     },
     "TX_COUNT": {
