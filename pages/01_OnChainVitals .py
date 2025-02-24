@@ -12,26 +12,51 @@ st.set_page_config(
 )
 
 # 1) Dark Theme Styling (full black background)
-st.markdown(
-    """
-    <style>
-    body {
-        background-color: #000000;
-        color: #f0f2f6;
-    }
-    .css-18e3th9, .css-1dp5vir, .css-12oz5g7, .st-bq {
-        background-color: #000000 !important;
-    }
-    .css-15zrgzn, .css-1hynb2t, .css-1xh633b, .css-17eq0hr {
-        color: #f0f2f6;
-    }
-    .css-1xh633b a {
-        color: #1FA2FF;
-    }
-    </style>
-    """,
-    unsafe_allow_html=True
-)
+# Inject Bootstrap + custom style
+st.markdown("""
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
+
+<style>
+#MainMenu {visibility: hidden;}
+footer {visibility: hidden;}
+body {
+  background-color: #000000;
+  color: #f0f2f6;
+}
+.navbar-custom {
+  background-color: #111111 !important;
+}
+.container {
+  margin-top: 80px;
+}
+</style>
+
+<!-- Optional: Reuse the same navbar if you wish -->
+<nav class="navbar navbar-expand-lg navbar-dark navbar-custom fixed-top">
+  <div class="container-fluid">
+    <a class="navbar-brand" href="/">OnChain Explorer</a>
+    <button class="navbar-toggler" type="button"
+            data-bs-toggle="collapse"
+            data-bs-target="#navbarNav"
+            aria-controls="navbarNav" aria-expanded="false"
+            aria-label="Toggle navigation">
+      <span class="navbar-toggler-icon"></span>
+    </button>
+
+    <div class="collapse navbar-collapse" id="navbarNav">
+      <ul class="navbar-nav me-auto">
+        <li class="nav-item">
+          <a class="nav-link" href="/?page=OnChainVitals">OnChainVitals</a>
+        </li>
+        <li class="nav-item">
+          <a class="nav-link" href="/?page=BlockchainScope">BlockchainScope</a>
+        </li>
+      </ul>
+    </div>
+  </div>
+</nav>
+""", unsafe_allow_html=True)
+
 
 # 2) Snowflake Connection
 cx = st.connection("snowflake")
