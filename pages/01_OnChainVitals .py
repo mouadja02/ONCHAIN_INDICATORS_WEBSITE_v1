@@ -370,7 +370,6 @@ with plot_container:
 st.header("Address Balance Bands Over Time")
 
 # -- 7.1) Let user pick band(s)
-# We'll fetch the distinct band names from the daily table
 band_query = """
     SELECT DISTINCT BALANCE_BAND
     FROM BTC_DATA.DATA.ADDRESS_BALANCE_BANDS_DAILY
@@ -386,7 +385,7 @@ selected_bands = st.multiselect(
 )
 
 # -- 7.2) Let user choose date range & scale
-colA, colB = st.columns(2)
+colA, colB, colC = st.columns(3)
 with colA:
     default_bands_start_date = datetime.date(2015, 1, 1)
     selected_bands_start_date = st.date_input(
@@ -396,6 +395,15 @@ with colA:
     )
 with colB:
     scale_option_bands = st.radio("Y-axis Scale for Bands", ["Linear", "Log"], index=0)
+with colC:
+    # EMA Option for the bands
+    show_bands_ema = st.checkbox("Add EMA for Bands?", value=False)
+    if show_bands_ema:
+        bands_ema_period = st.number_input(
+            "Bands EMA Period (days)",
+            min_value=2, max_value=200,
+            value=20
+        )
 
 # -- 7.3) Stop if no band selected
 if not selected_bands:
@@ -427,10 +435,17 @@ pivot_df = bands_df.pivot(
     values="ADDRESS_COUNT"
 ).fillna(0).reset_index()
 
-# -- 7.6) Plotly chart with each selected band as a separate line
+# -- 7.6) If user wants EMA, compute EMA for each band
+if show_bands_ema:
+    for band in selected_bands:
+        ema_column_name = f"EMA_{band}"
+        pivot_df[ema_column_name] = pivot_df[band].ewm(span=bands_ema_period).mean()
+
+# -- 7.7) Plotly chart with each selected band as a separate line
 fig_bands = go.Figure()
 
 for band in selected_bands:
+    # Original band trace
     fig_bands.add_trace(
         go.Scatter(
             x=pivot_df["DAY"],
@@ -439,6 +454,19 @@ for band in selected_bands:
             name=band
         )
     )
+    # If EMA is enabled, add a dashed line for the EMA
+    if show_bands_ema:
+        ema_col = f"EMA_{band}"
+        fig_bands.add_trace(
+            go.Scatter(
+                x=pivot_df["DAY"],
+                y=pivot_df[ema_col],
+                mode="lines",
+                name=f"EMA({bands_ema_period}) - {band}",
+                line=dict(dash="dash"),
+                opacity=0.7
+            )
+        )
 
 fig_bands.update_layout(
     paper_bgcolor="#000000",
