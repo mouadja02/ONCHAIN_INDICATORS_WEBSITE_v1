@@ -11,7 +11,9 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
+######################################
 # 1) Dark Theme Styling (full black background)
+######################################
 st.markdown(
     """
     <style>
@@ -33,11 +35,15 @@ st.markdown(
     unsafe_allow_html=True
 )
 
+######################################
 # 2) Snowflake Connection
+######################################
 cx = st.connection("snowflake")
 session = cx.session()
 
+######################################
 # 3) Table Configurations
+######################################
 TABLE_DICT = {
     "ACTIVE_ADDRESSES": {
         "table_name": "BTC_DATA.DATA.ACTIVE_ADDRESSES",
@@ -111,12 +117,14 @@ BTC_PRICE_TABLE = "BTC_DATA.DATA.BTC_PRICE_USD"
 BTC_PRICE_DATE_COL = "DATE"
 BTC_PRICE_VALUE_COL = "BTC_PRICE_USD"
 
+######################################
 # 4) Page Title
+######################################
 st.title("Bitcoin On-chain Indicators Dashboard")
 
-#########################
-# 5) CONTROLS (TOP)
-#########################
+####################################################
+# 5) TOP CONTROLS for the main indicators chart
+####################################################
 control_container = st.container()
 with control_container:
     st.subheader("Chart Controls")
@@ -188,9 +196,9 @@ with control_container:
         picked_color = st.color_picker(f"Color for {col}", value=default_col_color)
         st.session_state["colors"][col] = picked_color
 
-#########################
-# 6) CHART (BOTTOM) — Plot Immediately
-#########################
+####################################################
+# 6) MAIN INDICATORS CHART
+####################################################
 plot_container = st.container()
 with plot_container:
     if not selected_columns:
@@ -251,9 +259,7 @@ with plot_container:
             merged_df[f"EMA_{col}"] = merged_df[col].ewm(span=ema_period).mean()
 
     # Build Plotly Figure
-    from plotly.subplots import make_subplots
     fig = make_subplots(specs=[[{"secondary_y": True}]])
-    import plotly.graph_objects as go
     
     # Plot each indicator on the left axis
     for col in selected_columns:
@@ -278,6 +284,7 @@ with plot_container:
                 ),
                 secondary_y=False
             )
+        # If EMA is shown
         if show_ema:
             fig.add_trace(
                 go.Scatter(
@@ -351,3 +358,101 @@ with plot_container:
     )
 
     st.plotly_chart(fig, use_container_width=True)
+
+####################################################
+# 7) ADDRESS BALANCE BANDS SECTION
+####################################################
+st.header("Address Balance Bands Over Time")
+
+# -- 7.1) Let user pick band(s)
+# We'll fetch the distinct band names from the daily table
+band_query = """
+    SELECT DISTINCT BALANCE_BAND
+    FROM BTC_DATA.DATA.ADDRESS_BALANCE_BANDS_DAILY
+    ORDER BY BALANCE_BAND
+"""
+band_list_df = session.sql(band_query).to_pandas()
+all_bands = band_list_df["BALANCE_BAND"].tolist()
+
+selected_bands = st.multiselect(
+    "Select one or more balance bands:",
+    options=all_bands,
+    default=[all_bands[0]] if all_bands else []
+)
+
+# -- 7.2) Let user choose date range & scale
+colA, colB = st.columns(2)
+with colA:
+    default_bands_start_date = datetime.date(2015, 1, 1)
+    selected_bands_start_date = st.date_input(
+        "Start Date for Bands",
+        value=default_bands_start_date,
+        help="Filter data from this date onward."
+    )
+with colB:
+    scale_option_bands = st.radio("Y-axis Scale for Bands", ["Linear", "Log"], index=0)
+
+# -- 7.3) Stop if no band selected
+if not selected_bands:
+    st.warning("Please select at least one band.")
+    st.stop()
+
+# -- 7.4) Query daily counts from your table
+bands_str = ", ".join([f"'{b}'" for b in selected_bands])
+daily_counts_query = f"""
+    SELECT
+        DAY,
+        BALANCE_BAND,
+        ADDRESS_COUNT
+    FROM BTC_DATA.DATA.ADDRESS_BALANCE_BANDS_DAILY
+    WHERE DAY >= '{selected_bands_start_date}'
+      AND BALANCE_BAND IN ({bands_str})
+    ORDER BY DAY
+"""
+bands_df = session.sql(daily_counts_query).to_pandas()
+
+if bands_df.empty:
+    st.warning("No data returned for the selected balance bands and date range.")
+    st.stop()
+
+# -- 7.5) Pivot so each band is a separate column
+pivot_df = bands_df.pivot(
+    index="DAY",
+    columns="BALANCE_BAND",
+    values="ADDRESS_COUNT"
+).fillna(0).reset_index()
+
+# -- 7.6) Plotly chart with each selected band as a separate line
+fig_bands = go.Figure()
+
+for band in selected_bands:
+    fig_bands.add_trace(
+        go.Scatter(
+            x=pivot_df["DAY"],
+            y=pivot_df[band],
+            mode="lines",
+            name=band
+        )
+    )
+
+fig_bands.update_layout(
+    paper_bgcolor="#000000",
+    plot_bgcolor="#000000",
+    title="Daily Address Count by Balance Band",
+    hovermode="x unified",
+    font=dict(color="#f0f2f6"),
+    legend=dict(
+        x=0,
+        y=1.05,
+        bgcolor="rgba(0,0,0,0)",
+        orientation="h"
+    )
+)
+fig_bands.update_xaxes(title_text="Date", gridcolor="#4f5b66")
+fig_bands.update_yaxes(
+    title_text="Address Count",
+    type="log" if scale_option_bands == "Log" else "linear",
+    gridcolor="#4f5b66"
+)
+
+st.plotly_chart(fig_bands, use_container_width=True)
