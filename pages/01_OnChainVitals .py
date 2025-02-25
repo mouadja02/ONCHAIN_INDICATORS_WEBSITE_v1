@@ -105,6 +105,13 @@ TABLE_DICT = {
             "INFLOW","OUTFLOW","NETFLOW"
         ]
     },
+    "HOLDER_REALIZED_PRICES" : {
+        "table_name": "BTC_DATA.DATA.HOLDER_REALIZED_PRICES",
+        "date_col": "DATE",
+        "numeric_cols": [
+            "SHORT_TERM_HOLDER_REALIZED_PRICE","LONG_TERM_HOLDER_REALIZED_PRICE"
+        ]
+    },
     "MVRV": {
         "table_name": "BTC_DATA.DATA.MVRV",
         "date_col": "DATE",
