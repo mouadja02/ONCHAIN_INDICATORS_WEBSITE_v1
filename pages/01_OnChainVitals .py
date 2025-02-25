@@ -90,7 +90,8 @@ TABLE_DICT = {
         "date_col": "DATE",
         "numeric_cols": [
             "REALIZED_CAP_USD",
-            "REALIZED_PRICE_USD"
+            "REALIZED_PRICE_USD",
+            "TOTAL_UNSPENT_BTC"
         ]
     },
     "CDD": {
