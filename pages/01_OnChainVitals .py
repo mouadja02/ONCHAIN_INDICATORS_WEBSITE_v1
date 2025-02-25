@@ -3,6 +3,7 @@ import pandas as pd
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 import datetime
+import random
 
 # Set page config at the TOP of the file
 st.set_page_config(
@@ -42,7 +43,35 @@ cx = st.connection("snowflake")
 session = cx.session()
 
 ######################################
-# 3) Table Configurations
+# 3) Define color palette & session color tracking
+######################################
+COLOR_PALETTE = [
+    "#E74C3C",  # Red
+    "#F1C40F",  # Yellow
+    "#2ECC71",  # Green
+    "#3498DB",  # Blue
+    "#9B59B6",  # Purple
+    "#1ABC9C",  # Teal
+    "#E67E22",  # Orange
+    "#FF00FF",  # Magenta
+    "#FF1493",  # DeepPink
+    "#FFD700",  # Gold
+]
+
+# Shuffle the palette once per session (so each run is consistent in one session)
+if "color_palette" not in st.session_state:
+    st.session_state["color_palette"] = COLOR_PALETTE.copy()
+    random.shuffle(st.session_state["color_palette"])
+
+# A dict to track assigned colors for each column/indicator
+if "assigned_colors" not in st.session_state:
+    st.session_state["assigned_colors"] = {}
+
+if "colors" not in st.session_state:
+    st.session_state["colors"] = {}
+
+######################################
+# 4) Table Configurations
 ######################################
 TABLE_DICT = {
     "ACTIVE_ADDRESSES": {
@@ -135,12 +164,12 @@ BTC_PRICE_DATE_COL = "DATE"
 BTC_PRICE_VALUE_COL = "BTC_PRICE_USD"
 
 ######################################
-# 4) Page Title
+# 5) Page Title
 ######################################
 st.title("Bitcoin On-chain Indicators Dashboard")
 
 ####################################################
-# 5) TOP CONTROLS for the main indicators chart
+# 6) TOP CONTROLS for the main indicators chart
 ####################################################
 control_container = st.container()
 with control_container:
@@ -191,37 +220,39 @@ with control_container:
     with col6:
         show_btc_price = st.checkbox("Show BTC Price?", value=True)
 
-    # NEW CHECKBOX: Plot BTC Price on same axis or secondary axis
+    # CHECKBOX: Plot BTC Price on same axis or secondary axis
     same_axis_checkbox = st.checkbox("Plot BTC Price on the same Y-axis as Indicators?", value=False)
 
-    # Color Pickers
-    st.markdown("---")
-    st.markdown("**Colors**")
-    if "colors" not in st.session_state:
-        st.session_state["colors"] = {}
+##############################################
+# 7) ASSIGN RANDOM COLORS TO SELECTED COLUMNS
+##############################################
+if not selected_columns:
+    st.warning("Please select at least one indicator column.")
+    st.stop()
 
-    # BTC Price color (if enabled)
-    if show_btc_price:
-        btc_price_color = st.color_picker(
-            "BTC Price Color",
-            value=st.session_state["colors"].get("BTC_PRICE", "#FFA500")
-        )
-        st.session_state["colors"]["BTC_PRICE"] = btc_price_color
+# Assign a color to each selected column from the shuffled palette
+for i, col in enumerate(selected_columns):
+    if col not in st.session_state["assigned_colors"]:
+        assigned_color = st.session_state["color_palette"][i % len(st.session_state["color_palette"])]
+        st.session_state["assigned_colors"][col] = assigned_color
 
-    for col in selected_columns:
-        default_col_color = st.session_state["colors"].get(col, "#0000FF")
-        picked_color = st.color_picker(f"Color for {col}", value=default_col_color)
-        st.session_state["colors"][col] = picked_color
+    # Ensure "colors" dict is updated for the charting logic
+    st.session_state["colors"][col] = st.session_state["assigned_colors"][col]
+
+# Handle BTC Price color if user toggles it on
+if show_btc_price:
+    if "BTC_PRICE" not in st.session_state["assigned_colors"]:
+        # Assign the next color in the palette for BTC Price
+        price_color_index = len(selected_columns) % len(st.session_state["color_palette"])
+        st.session_state["assigned_colors"]["BTC_PRICE"] = st.session_state["color_palette"][price_color_index]
+
+    st.session_state["colors"]["BTC_PRICE"] = st.session_state["assigned_colors"]["BTC_PRICE"]
 
 ####################################################
-# 6) MAIN INDICATORS CHART
+# 8) MAIN INDICATORS CHART
 ####################################################
 plot_container = st.container()
 with plot_container:
-    if not selected_columns:
-        st.warning("Please select at least one indicator column.")
-        st.stop()
-
     # Query BTC Price if requested
     btc_price_df = pd.DataFrame()
     if show_btc_price:
@@ -309,8 +340,7 @@ with plot_container:
                     y=merged_df[f"EMA_{col}"],
                     mode="lines",
                     name=f"EMA({ema_period}) - {col}",
-                    line=dict(color=st.session_state["colors"][col], dash="dash"),
-                    opacity=0.8
+                    line=dict(color=st.session_state["colors"][col]),
                 ),
                 secondary_y=False
             )
@@ -377,11 +407,11 @@ with plot_container:
     st.plotly_chart(fig, use_container_width=True)
 
 ####################################################
-# 7) ADDRESS BALANCE BANDS SECTION
+# 9) ADDRESS BALANCE BANDS SECTION (with EMA)
 ####################################################
 st.header("Address Balance Bands Over Time")
 
-# -- 7.1) Let user pick band(s)
+# -- 9.1) Let user pick band(s)
 band_query = """
     SELECT DISTINCT BALANCE_BAND
     FROM BTC_DATA.DATA.ADDRESS_BALANCE_BANDS_DAILY
@@ -396,7 +426,7 @@ selected_bands = st.multiselect(
     default=[all_bands[0]] if all_bands else []
 )
 
-# -- 7.2) Let user choose date range & scale
+# -- 9.2) Let user choose date range & scale
 colA, colB, colC = st.columns(3)
 with colA:
     default_bands_start_date = datetime.date(2015, 1, 1)
@@ -417,12 +447,12 @@ with colC:
             value=20
         )
 
-# -- 7.3) Stop if no band selected
+# -- 9.3) Stop if no band selected
 if not selected_bands:
     st.warning("Please select at least one band.")
     st.stop()
 
-# -- 7.4) Query daily counts from your table
+# -- 9.4) Query daily counts from your table
 bands_str = ", ".join([f"'{b}'" for b in selected_bands])
 daily_counts_query = f"""
     SELECT
@@ -440,20 +470,20 @@ if bands_df.empty:
     st.warning("No data returned for the selected balance bands and date range.")
     st.stop()
 
-# -- 7.5) Pivot so each band is a separate column
+# -- 9.5) Pivot so each band is a separate column
 pivot_df = bands_df.pivot(
     index="DAY",
     columns="BALANCE_BAND",
     values="ADDRESS_COUNT"
 ).fillna(0).reset_index()
 
-# -- 7.6) If user wants EMA, compute EMA for each band
+# -- 9.6) If user wants EMA, compute EMA for each band
 if show_bands_ema:
     for band in selected_bands:
         ema_column_name = f"EMA_{band}"
         pivot_df[ema_column_name] = pivot_df[band].ewm(span=bands_ema_period).mean()
 
-# -- 7.7) Plotly chart with each selected band as a separate line
+# -- 9.7) Plotly chart with each selected band as a separate line
 fig_bands = go.Figure()
 
 for band in selected_bands:
