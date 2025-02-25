@@ -119,6 +119,13 @@ TABLE_DICT = {
         "numeric_cols": [
             "MVRV"
         ]
+    },    
+    "MVRV_WITH_HOLDER_TYPES": {
+        "table_name": "BTC_DATA.DATA.MVRV_WITH_HOLDER_TYPES",
+        "date_col": "DATE",
+        "numeric_cols": [
+            "OVERALL_MVRV","STH_MVRV","LTH_MVRV"
+        ]
     },
     "NUPL": {
         "table_name": "BTC_DATA.DATA.NUPL",
