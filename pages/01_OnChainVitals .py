@@ -58,15 +58,16 @@ COLOR_PALETTE = [
     "#FFD700",  # Gold
 ]
 
-# Shuffle the palette once per session (so each run is consistent in one session)
+# Shuffle the palette once per session
 if "color_palette" not in st.session_state:
     st.session_state["color_palette"] = COLOR_PALETTE.copy()
     random.shuffle(st.session_state["color_palette"])
 
-# A dict to track assigned colors for each column/indicator
+# Keep track of assigned colors for each column/indicator
 if "assigned_colors" not in st.session_state:
     st.session_state["assigned_colors"] = {}
 
+# The chart logic reads from st.session_state["colors"], so ensure it exists
 if "colors" not in st.session_state:
     st.session_state["colors"] = {}
 
@@ -223,30 +224,43 @@ with control_container:
     # CHECKBOX: Plot BTC Price on same axis or secondary axis
     same_axis_checkbox = st.checkbox("Plot BTC Price on the same Y-axis as Indicators?", value=False)
 
+    # Line break
+    st.markdown("---")
+    st.markdown("**Customize Colors**")
+
 ##############################################
-# 7) ASSIGN RANDOM COLORS TO SELECTED COLUMNS
+# 7) Assign Random Colors AND Provide a Picker
 ##############################################
 if not selected_columns:
     st.warning("Please select at least one indicator column.")
     st.stop()
 
-# Assign a color to each selected column from the shuffled palette
+# 7.1. Randomly assign colors (only once per session) for each selected column if not already assigned
 for i, col in enumerate(selected_columns):
     if col not in st.session_state["assigned_colors"]:
         assigned_color = st.session_state["color_palette"][i % len(st.session_state["color_palette"])]
         st.session_state["assigned_colors"][col] = assigned_color
 
-    # Ensure "colors" dict is updated for the charting logic
-    st.session_state["colors"][col] = st.session_state["assigned_colors"][col]
+# 7.2. Let the user override the color via a color picker
+for col in selected_columns:
+    default_color = st.session_state["assigned_colors"][col]
+    picked_color = st.color_picker(f"Color for {col}", value=default_color)
+    # Update assigned_colors and the "colors" dict used by the chart
+    st.session_state["assigned_colors"][col] = picked_color
+    st.session_state["colors"][col] = picked_color
 
-# Handle BTC Price color if user toggles it on
+# 7.3. Handle BTC Price color similarly if shown
 if show_btc_price:
     if "BTC_PRICE" not in st.session_state["assigned_colors"]:
-        # Assign the next color in the palette for BTC Price
+        # pick the next color from the palette
         price_color_index = len(selected_columns) % len(st.session_state["color_palette"])
         st.session_state["assigned_colors"]["BTC_PRICE"] = st.session_state["color_palette"][price_color_index]
 
-    st.session_state["colors"]["BTC_PRICE"] = st.session_state["assigned_colors"]["BTC_PRICE"]
+    default_btc_color = st.session_state["assigned_colors"]["BTC_PRICE"]
+    picked_btc_color = st.color_picker("Color for BTC Price", value=default_btc_color)
+    st.session_state["assigned_colors"]["BTC_PRICE"] = picked_btc_color
+    st.session_state["colors"]["BTC_PRICE"] = picked_btc_color
+
 
 ####################################################
 # 8) MAIN INDICATORS CHART
