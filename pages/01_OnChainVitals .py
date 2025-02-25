@@ -141,6 +141,11 @@ TABLE_DICT = {
         "date_col": "spent_date",
         "numeric_cols": ["SOPR"]
     },
+    "SOPR_WITH_HOLDER_TYPES": {
+        "table_name": "BTC_DATA.DATA.SOPR_WITH_HOLDER_TYPES"
+        "date_col": "sale_date",
+        "numeric_cols": ["overall_sopr","sth_sopr","lth_sopr"]
+    },
     "TX_COUNT": {
         "table_name": "BTC_DATA.DATA.TX_COUNT",
         "date_col": "BLOCK_TIMESTAMP",
