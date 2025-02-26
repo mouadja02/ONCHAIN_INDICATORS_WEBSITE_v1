@@ -138,11 +138,6 @@ TABLE_DICT = {
     },
 }
 
-# BTC Price configuration (handled separately)
-BTC_PRICE_TABLE = "BTC_DATA.DATA.BTC_PRICE_USD"
-BTC_PRICE_DATE_COL = "DATE"
-BTC_PRICE_VALUE_COL = "BTC_PRICE_USD"
-
 ######################################
 # 5) Page Title
 ######################################
@@ -159,7 +154,7 @@ with control_container:
     selected_tables = st.multiselect(
         "Select one or more tables to combine:",
         list(TABLE_DICT.keys()),
-        default=list(TABLE_DICT.keys())[:2],   # default to first two (adjust as desired)
+        default=list(TABLE_DICT.keys())[:2],
         help="You can pick multiple tables. Their indicators will be merged on the DATE field."
     )
     
@@ -174,17 +169,12 @@ with control_container:
             key=f"{tbl}_indicators"
         )
     
-    # Option to include BTC Price as an additional indicator.
-    include_btc = st.checkbox("Include BTC Price as an Indicator", value=True)
-    
     # Common chart options
-    col1, col2, col3 = st.columns(3)
+    col1, col2 = st.columns(2)
     with col1:
         scale_option = st.radio("Y-Axis Scale", ["Linear", "Log"], index=0)
     with col2:
         chart_type = st.radio("Chart Type", ["Line", "Bars"], index=0)
-    with col3:
-        same_axis_checkbox = st.checkbox("Plot BTC Price on same Y-axis?", value=False)
     
     # EMA options
     show_ema = st.checkbox("Add EMA to indicators", value=False)
@@ -201,15 +191,15 @@ with control_container:
 ######################################
 # 7) Assign Colors for Each Indicator
 ######################################
-# Build a unique list of indicator names (we prefix each with its table for clarity)
+# Build a unique list of indicator names (prefix each with its table for clarity;
+# if the table is BTC_PRICE_USD, rename its indicator as "BTC_PRICE")
 combined_indicators = []
-# For each table and its selected indicators, define a new name
 for tbl, cols in table_indicators.items():
     for col in cols:
-        combined_indicators.append(f"{tbl}:{col}")
-# Also add BTC Price if selected
-if include_btc:
-    combined_indicators.append("BTC_PRICE")
+        if tbl == "BTC_PRICE_USD":
+            combined_indicators.append("BTC_PRICE")
+        else:
+            combined_indicators.append(f"{tbl}:{col}")
 
 # Assign a color for each indicator (if not already assigned)
 for i, ind in enumerate(combined_indicators):
@@ -221,6 +211,16 @@ for i, ind in enumerate(combined_indicators):
     st.session_state["assigned_colors"][ind] = picked_color
     st.session_state["colors"][ind] = picked_color
 
+# New control: Let user choose which indicators should be plotted on the primary Y-axis.
+# By default, we set all indicators except BTC_PRICE on primary axis.
+default_primary = [ind for ind in combined_indicators if ind != "BTC_PRICE"]
+primary_y_indicators = st.multiselect(
+    "Select indicators for primary Y-axis",
+    combined_indicators,
+    default=default_primary,
+    help="Indicators not selected here will be plotted on the secondary Y-axis."
+)
+
 ####################################################
 # 8) Build and Plot the Combined Chart
 ####################################################
@@ -229,7 +229,7 @@ with plot_container:
     # Prepare a list to hold each table’s data
     df_list = []
     
-    # For each selected table, query its indicators and rename columns
+    # For each selected table, query its indicators and rename columns accordingly
     for tbl in selected_tables:
         cols = table_indicators[tbl]
         if not cols:
@@ -246,32 +246,20 @@ with plot_container:
             ORDER BY DATE
         """
         df = session.sql(query).to_pandas()
-        # Rename indicator columns by prefixing the table name (format: TABLE:Indicator)
-        rename_dict = {col: f"{tbl}:{col}" for col in cols}
+        # Rename indicator columns by prefixing the table name.
+        # For the BTC_PRICE_USD table, rename its column as "BTC_PRICE"
+        if tbl == "BTC_PRICE_USD":
+            rename_dict = {cols[0]: "BTC_PRICE"}
+        else:
+            rename_dict = {col: f"{tbl}:{col}" for col in cols}
         df.rename(columns=rename_dict, inplace=True)
         df_list.append(df)
     
-    # Query BTC Price if selected
-    if include_btc:
-        btc_query = f"""
-            SELECT
-                CAST({BTC_PRICE_DATE_COL} AS DATE) AS DATE,
-                {BTC_PRICE_VALUE_COL}
-            FROM {BTC_PRICE_TABLE}
-            WHERE {BTC_PRICE_VALUE_COL} IS NOT NULL
-              AND CAST({BTC_PRICE_DATE_COL} AS DATE) >= '{selected_start_date}'
-            ORDER BY DATE
-        """
-        btc_df = session.sql(btc_query).to_pandas()
-        btc_df.rename(columns={BTC_PRICE_VALUE_COL: "BTC_PRICE"}, inplace=True)
-        df_list.append(btc_df)
-    
-    # Merge all dataframes on DATE using an outer join
     if not df_list:
         st.warning("No data returned. Check your selections and date range.")
         st.stop()
     
-    # Start with the first dataframe and merge iteratively
+    # Merge all dataframes on DATE using an outer join
     merged_df = df_list[0]
     for df in df_list[1:]:
         merged_df = pd.merge(merged_df, df, on="DATE", how="outer")
@@ -284,80 +272,47 @@ with plot_container:
                 continue
             merged_df[f"EMA_{col}"] = merged_df[col].ewm(span=ema_period).mean()
     
-    # Build combined Plotly figure (using secondary y-axis for BTC_PRICE if needed)
+    # Build combined Plotly figure
     fig = make_subplots(specs=[[{"secondary_y": True}]])
     for col in merged_df.columns:
         if col == "DATE":
             continue
-        # Determine if this trace is BTC_PRICE
-        if col == "BTC_PRICE":
-            secondary_y = not same_axis_checkbox
-            if chart_type == "Line":
-                fig.add_trace(
-                    go.Scatter(
-                        x=merged_df["DATE"],
-                        y=merged_df[col],
-                        mode="lines",
-                        name=col,
-                        line=dict(color=st.session_state["colors"][col])
-                    ),
-                    secondary_y=secondary_y
-                )
-            else:
-                fig.add_trace(
-                    go.Bar(
-                        x=merged_df["DATE"],
-                        y=merged_df[col],
-                        name=col,
-                        marker_color=st.session_state["colors"][col]
-                    ),
-                    secondary_y=secondary_y
-                )
-            if show_ema:
-                fig.add_trace(
-                    go.Scatter(
-                        x=merged_df["DATE"],
-                        y=merged_df[f"EMA_{col}"],
-                        mode="lines",
-                        name=f"EMA({ema_period}) - {col}",
-                        line=dict(color=st.session_state["colors"][col])
-                    ),
-                    secondary_y=secondary_y
-                )
+        # Use the multiselect selection to decide which y-axis to use:
+        # If the indicator is in primary_y_indicators, use primary y-axis; otherwise, use secondary.
+        secondary_y = False if col in primary_y_indicators else True
+        
+        if chart_type == "Line":
+            fig.add_trace(
+                go.Scatter(
+                    x=merged_df["DATE"],
+                    y=merged_df[col],
+                    mode="lines",
+                    name=col,
+                    line=dict(color=st.session_state["colors"][col])
+                ),
+                secondary_y=secondary_y
+            )
         else:
-            # Other indicators plotted on primary y-axis
-            if chart_type == "Line":
-                fig.add_trace(
-                    go.Scatter(
-                        x=merged_df["DATE"],
-                        y=merged_df[col],
-                        mode="lines",
-                        name=col,
-                        line=dict(color=st.session_state["colors"][col])
-                    ),
-                    secondary_y=False
-                )
-            else:
-                fig.add_trace(
-                    go.Bar(
-                        x=merged_df["DATE"],
-                        y=merged_df[col],
-                        name=col,
-                        marker_color=st.session_state["colors"][col]
-                    ),
-                    secondary_y=False
-                )
-            if show_ema:
-                fig.add_trace(
-                    go.Scatter(
-                        x=merged_df["DATE"],
-                        y=merged_df[f"EMA_{col}"],
-                        mode="lines",
-                        name=f"EMA({ema_period}) - {col}",
-                        line=dict(color=st.session_state["colors"][col])
-                    ),
-                    secondary_y=False
-                )
+            fig.add_trace(
+                go.Bar(
+                    x=merged_df["DATE"],
+                    y=merged_df[col],
+                    name=col,
+                    marker_color=st.session_state["colors"][col]
+                ),
+                secondary_y=secondary_y
+            )
+        if show_ema:
+            fig.add_trace(
+                go.Scatter(
+                    x=merged_df["DATE"],
+                    y=merged_df[f"EMA_{col}"],
+                    mode="lines",
+                    name=f"EMA({ema_period}) - {col}",
+                    line=dict(color=st.session_state["colors"][col])
+                ),
+                secondary_y=secondary_y
+            )
     
     fig_title = "Combined Indicators Chart"
     fig.update_layout(
@@ -376,7 +331,7 @@ with plot_container:
         gridcolor="#4f5b66"
     )
     fig.update_yaxes(
-        title_text="BTC Price (USD)" if not same_axis_checkbox else "",
+        title_text="Secondary Axis",
         type="log" if scale_option == "Log" else "linear",
         secondary_y=True,
         gridcolor="#4f5b66"
