@@ -1,0 +1,1 @@
+from .my_draw_component import st_my_draw_component
