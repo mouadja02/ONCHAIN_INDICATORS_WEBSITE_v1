@@ -3,14 +3,13 @@ from my_draw_component import st_my_draw_component
 
 st.set_page_config(page_title="Drawable Plotly App", layout="wide")
 
-st.title("My Drawable Plotly Chart")
+st.title("My Drawable Plotly Chart (Deployed on Streamlit)")
 
-# Provide data to the component
-x_data = [1,2,3,4]
-y_data = [10,15,5,12]
+# Some data to pass to the front-end
+x_data = [1, 2, 3, 4]
+y_data = [10, 15, 5, 12]
 
-# Call your custom component
-drawn_shapes = st_my_draw_component(x=x_data, y=y_data, key="chart1")
+shapes_info = st_my_draw_component(x=x_data, y=y_data, key="draw1")
 
-st.write("Shapes or relayout data from the front-end:")
-st.json(drawn_shapes)
+st.write("Shape data (or relayout data) from the front-end:")
+st.json(shapes_info)
