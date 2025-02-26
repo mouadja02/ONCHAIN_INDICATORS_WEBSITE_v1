@@ -438,7 +438,19 @@ with plot_container:
         gridcolor="#4f5b66"
     )
 
-    st.plotly_chart(fig, use_container_width=True)
+    config = {
+    'editable': True,
+    'modeBarButtonsToAdd': [
+        'drawline',
+        'drawopenpath',
+        'drawclosedpath',
+        'drawcircle',
+        'drawrect',
+        'eraseshape'
+    ]
+    }
+    st.plotly_chart(fig, use_container_width=True, config=config)
+    
 
 ####################################################
 # 9) ADDRESS BALANCE BANDS SECTION (with EMA)
