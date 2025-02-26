@@ -215,11 +215,13 @@ if plotting_mode == "Single Table Plot":
             show_btc_price = st.checkbox("Show BTC Price?", value=True)
     
         # Option: Plot BTC Price on same axis or secondary axis
-        same_axis_checkbox = st.checkbox("Plot BTC Price on the same Y-axis as Indicators?", value=False)
+        same_axis_checkbox = st.checkbox("Plot BTC Price on the same Y-axis as Indicators ?", value=False)
     
         # New CPD option for BTC Price
         detect_cpd = st.checkbox("Detect Change Points on BTC Price", value=False)
-    
+
+        pen = st.number_input("CPD Penalty Value", min_value=1, max_value=200, value=10)
+
         st.markdown("---")
         st.markdown("**Customize Colors**")
     
@@ -366,7 +368,7 @@ if plotting_mode == "Single Table Plot":
             if not btc_series.empty:
                 algo = rpt.Pelt(model="rbf").fit(btc_series.values)
                 # You can adjust the penalty (pen) as needed.
-                change_points = algo.predict(pen=10)
+                change_points = algo.predict(pen=pen)
                 for cp in change_points:
                     if cp < len(merged_df):
                         cp_date = merged_df["DATE"].iloc[cp]
