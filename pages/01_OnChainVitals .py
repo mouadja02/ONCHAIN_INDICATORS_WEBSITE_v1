@@ -83,7 +83,7 @@ TABLE_DICT = {
     "ADDRESSES_PROFIT_LOSS_PERCENT": {
         "table_name": "BTC_DATA.DATA.ADDRESSES_PROFIT_LOSS_PERCENT",
         "date_col": "sale_date", 
-        "numeric_cols": ["PERCENT_PROFIT","PERCENT_LOSS"]
+        "numeric_cols": ["PERCENT_PROFIT", "PERCENT_LOSS"]
     },
     "BTC_REALIZED_CAP_AND_PRICE": {
         "table_name": "BTC_DATA.DATA.BTC_REALIZED_CAP_AND_PRICE",
@@ -99,18 +99,18 @@ TABLE_DICT = {
         "date_col": "DATE",
         "numeric_cols": ["CDD_RAW", "CDD_30_DMA", "CDD_90_DMA"]
     },
-    "EXCHANGE_FLOW" : {
+    "EXCHANGE_FLOW": {
         "table_name": "BTC_DATA.DATA.EXCHANGE_FLOW",
         "date_col": "DAY",
         "numeric_cols": [
-            "INFLOW","OUTFLOW","NETFLOW"
+            "INFLOW", "OUTFLOW", "NETFLOW"
         ]
     },
-    "HOLDER_REALIZED_PRICES" : {
+    "HOLDER_REALIZED_PRICES": {
         "table_name": "BTC_DATA.DATA.HOLDER_REALIZED_PRICES",
         "date_col": "DATE",
         "numeric_cols": [
-            "SHORT_TERM_HOLDER_REALIZED_PRICE","LONG_TERM_HOLDER_REALIZED_PRICE"
+            "SHORT_TERM_HOLDER_REALIZED_PRICE", "LONG_TERM_HOLDER_REALIZED_PRICE"
         ]
     },
     "MVRV": {
@@ -119,12 +119,12 @@ TABLE_DICT = {
         "numeric_cols": [
             "MVRV"
         ]
-    },    
+    },
     "MVRV_WITH_HOLDER_TYPES": {
         "table_name": "BTC_DATA.DATA.MVRV_WITH_HOLDER_TYPES",
         "date_col": "DATE",
         "numeric_cols": [
-            "OVERALL_MVRV","STH_MVRV","LTH_MVRV"
+            "OVERALL_MVRV", "STH_MVRV", "LTH_MVRV"
         ]
     },
     "NUPL": {
@@ -151,7 +151,7 @@ TABLE_DICT = {
     "SOPR_WITH_HOLDER_TYPES": {
         "table_name": "BTC_DATA.DATA.SOPR_WITH_HOLDER_TYPES",
         "date_col": "sale_date",
-        "numeric_cols": ["OVERALL_SOPR","STH_SOPR","LTH_SOPR"]
+        "numeric_cols": ["OVERALL_SOPR", "STH_SOPR", "LTH_SOPR"]
     },
     "TX_COUNT": {
         "table_name": "BTC_DATA.DATA.TX_COUNT",
@@ -214,7 +214,6 @@ with control_container:
 
     # Axis Scales & Chart Types
     col1, col2, col3, col4 = st.columns(4)
-
     with col1:
         scale_option_indicator = st.radio("Indicator Axis", ["Linear", "Log"], index=0)
     with col2:
@@ -265,22 +264,18 @@ for i, col in enumerate(selected_columns):
 for col in selected_columns:
     default_color = st.session_state["assigned_colors"][col]
     picked_color = st.color_picker(f"Color for {col}", value=default_color)
-    # Update assigned_colors and the "colors" dict used by the chart
     st.session_state["assigned_colors"][col] = picked_color
     st.session_state["colors"][col] = picked_color
 
 # 7.3. Handle BTC Price color similarly if shown
 if show_btc_price:
     if "BTC_PRICE" not in st.session_state["assigned_colors"]:
-        # pick the next color from the palette
         price_color_index = len(selected_columns) % len(st.session_state["color_palette"])
         st.session_state["assigned_colors"]["BTC_PRICE"] = st.session_state["color_palette"][price_color_index]
-
     default_btc_color = st.session_state["assigned_colors"]["BTC_PRICE"]
     picked_btc_color = st.color_picker("Color for BTC Price", value=default_btc_color)
     st.session_state["assigned_colors"]["BTC_PRICE"] = picked_btc_color
     st.session_state["colors"]["BTC_PRICE"] = picked_btc_color
-
 
 ####################################################
 # 8) MAIN INDICATORS CHART
@@ -322,12 +317,7 @@ with plot_container:
 
     # Merge if BTC Price is shown
     if show_btc_price and not btc_price_df.empty:
-        merged_df = pd.merge(
-            btc_price_df,
-            indicator_df,
-            on="DATE",
-            how="inner"
-        )
+        merged_df = pd.merge(btc_price_df, indicator_df, on="DATE", how="inner")
     else:
         merged_df = indicator_df
 
@@ -342,7 +332,7 @@ with plot_container:
 
     # Build Plotly Figure
     fig = make_subplots(specs=[[{"secondary_y": True}]])
-    
+
     # Plot each indicator on the left axis
     for col in selected_columns:
         if chart_type_indicators == "Line":
@@ -356,7 +346,7 @@ with plot_container:
                 ),
                 secondary_y=False
             )
-        else:  # Bars
+        else:
             fig.add_trace(
                 go.Bar(
                     x=merged_df["DATE"],
@@ -382,7 +372,6 @@ with plot_container:
     # BTC Price
     if show_btc_price and not btc_price_df.empty:
         price_secondary_y = (not same_axis_checkbox)
-
         if chart_type_price == "Line":
             fig.add_trace(
                 go.Scatter(
@@ -394,7 +383,7 @@ with plot_container:
                 ),
                 secondary_y=price_secondary_y
             )
-        else:  # Bars
+        else:
             fig.add_trace(
                 go.Bar(
                     x=merged_df["DATE"],
@@ -407,30 +396,21 @@ with plot_container:
 
     # Dynamic title
     fig_title = f"{selected_table} vs BTC Price" if show_btc_price else f"{selected_table}"
-
     fig.update_layout(
         paper_bgcolor="#000000",
         plot_bgcolor="#000000",
         title=fig_title,
         hovermode="x unified",
         font=dict(color="#f0f2f6"),
-        legend=dict(
-            x=0,
-            y=1.05,
-            bgcolor="rgba(0,0,0,0)",
-            orientation="h"
-        )
+        legend=dict(x=0, y=1.05, bgcolor="rgba(0,0,0,0)", orientation="h")
     )
     fig.update_xaxes(title_text="Date", gridcolor="#4f5b66")
-
-    # Left Y-axis
     fig.update_yaxes(
         title_text="Indicator Value",
         type="log" if scale_option_indicator == "Log" else "linear",
         secondary_y=False,
         gridcolor="#4f5b66"
     )
-    # Right Y-axis (only used if same_axis_checkbox is False)
     fig.update_yaxes(
         title_text="BTC Price (USD)" if not same_axis_checkbox else "",
         type="log" if scale_option_price == "Log" else "linear",
@@ -438,19 +418,47 @@ with plot_container:
         gridcolor="#4f5b66"
     )
 
+    # Enable drawing tools on the modebar
     config = {
-    'editable': True,
-    'modeBarButtonsToAdd': [
-        'drawline',
-        'drawopenpath',
-        'drawclosedpath',
-        'drawcircle',
-        'drawrect',
-        'eraseshape'
-    ]
+        'editable': True,
+        'modeBarButtonsToAdd': [
+            'drawline',
+            'drawopenpath',
+            'drawclosedpath',
+            'drawcircle',
+            'drawrect',
+            'eraseshape'
+        ]
     }
     st.plotly_chart(fig, use_container_width=True, config=config)
     
+    # -------------------------------------------------------------------
+    # Extra Tools for Trading Analysis (Highlighting & Erasing Drawn Shapes)
+    # -------------------------------------------------------------------
+    st.markdown("### Extra Tools for Drawing Shapes")
+    highlight_color = st.color_picker("Select Highlight Color", "#FFFF00")
+    
+    if st.button("Highlight Last Drawn Shape"):
+        # Note: This example assumes that the shapes drawn via the modebar are captured
+        # in the figure's layout. In practice, client-side drawn shapes need to be
+        # communicated back to Python (e.g., via a custom component) for persistence.
+        shapes = fig.layout.shapes if fig.layout.shapes is not None else []
+        if shapes:
+            last_shape = shapes[-1]
+            # Update the last shape to "highlight" it by increasing line width and changing color
+            if 'line' in last_shape:
+                last_shape.line.color = highlight_color
+                last_shape.line.width = 4
+            else:
+                last_shape['line'] = dict(color=highlight_color, width=4)
+            fig.update_layout(shapes=shapes)
+            st.plotly_chart(fig, use_container_width=True, config=config)
+        else:
+            st.info("No shapes found to highlight.")
+    
+    if st.button("Erase All Drawn Shapes"):
+        fig.update_layout(shapes=[])
+        st.plotly_chart(fig, use_container_width=True, config=config)
 
 ####################################################
 # 9) ADDRESS BALANCE BANDS SECTION (with EMA)
@@ -484,14 +492,9 @@ with colA:
 with colB:
     scale_option_bands = st.radio("Y-axis Scale for Bands", ["Linear", "Log"], index=0)
 with colC:
-    # EMA Option for the bands
     show_bands_ema = st.checkbox("Add EMA for Bands?", value=False)
     if show_bands_ema:
-        bands_ema_period = st.number_input(
-            "Bands EMA Period (days)",
-            min_value=2, max_value=200,
-            value=20
-        )
+        bands_ema_period = st.number_input("Bands EMA Period (days)", min_value=2, max_value=200, value=20)
 
 # -- 9.3) Stop if no band selected
 if not selected_bands:
@@ -511,17 +514,12 @@ daily_counts_query = f"""
     ORDER BY DAY
 """
 bands_df = session.sql(daily_counts_query).to_pandas()
-
 if bands_df.empty:
     st.warning("No data returned for the selected balance bands and date range.")
     st.stop()
 
 # -- 9.5) Pivot so each band is a separate column
-pivot_df = bands_df.pivot(
-    index="DAY",
-    columns="BALANCE_BAND",
-    values="ADDRESS_COUNT"
-).fillna(0).reset_index()
+pivot_df = bands_df.pivot(index="DAY", columns="BALANCE_BAND", values="ADDRESS_COUNT").fillna(0).reset_index()
 
 # -- 9.6) If user wants EMA, compute EMA for each band
 if show_bands_ema:
@@ -531,9 +529,7 @@ if show_bands_ema:
 
 # -- 9.7) Plotly chart with each selected band as a separate line
 fig_bands = go.Figure()
-
 for band in selected_bands:
-    # Original band trace
     fig_bands.add_trace(
         go.Scatter(
             x=pivot_df["DAY"],
@@ -542,7 +538,6 @@ for band in selected_bands:
             name=band
         )
     )
-    # If EMA is enabled, add a dashed line for the EMA
     if show_bands_ema:
         ema_col = f"EMA_{band}"
         fig_bands.add_trace(
@@ -562,12 +557,7 @@ fig_bands.update_layout(
     title="Daily Address Count by Balance Band",
     hovermode="x unified",
     font=dict(color="#f0f2f6"),
-    legend=dict(
-        x=0,
-        y=1.05,
-        bgcolor="rgba(0,0,0,0)",
-        orientation="h"
-    )
+    legend=dict(x=0, y=1.05, bgcolor="rgba(0,0,0,0)", orientation="h")
 )
 fig_bands.update_xaxes(title_text="Date", gridcolor="#4f5b66")
 fig_bands.update_yaxes(
