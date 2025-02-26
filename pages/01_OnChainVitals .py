@@ -414,7 +414,6 @@ with plot_container:
         title=fig_title,
         hovermode="x unified",
         font=dict(color="#f0f2f6"),
-        editable = True,
         legend=dict(
             x=0,
             y=1.05,
