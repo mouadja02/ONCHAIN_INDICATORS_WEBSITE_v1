@@ -2,5 +2,5 @@ snowflake-snowpark-python
 streamlit
 requests
 pandas
-plotly
+plotly>=5.10.0
 datetime
