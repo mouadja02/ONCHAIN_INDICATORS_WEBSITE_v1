@@ -414,6 +414,7 @@ with plot_container:
         title=fig_title,
         hovermode="x unified",
         font=dict(color="#f0f2f6"),
+        editable = True,
         legend=dict(
             x=0,
             y=1.05,
@@ -440,6 +441,7 @@ with plot_container:
 
     config = {
     'editable': True,
+    'edits': {'shapePosition': True},
     'modeBarButtonsToAdd': [
         'drawline',
         'drawopenpath',
@@ -450,6 +452,7 @@ with plot_container:
     ]
     }
     st.plotly_chart(fig, use_container_width=True, config=config)
+
     
 
 ####################################################
