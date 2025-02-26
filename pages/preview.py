@@ -64,17 +64,90 @@ TABLE_DICT = {
         "date_col": "DATE", 
         "numeric_cols": ["ACTIVE_ADDRESSES"]
     },
+    "ADDRESSES_PROFIT_LOSS_PERCENT": {
+        "table_name": "BTC_DATA.DATA.ADDRESSES_PROFIT_LOSS_PERCENT",
+        "date_col": "sale_date", 
+        "numeric_cols": ["PERCENT_PROFIT","PERCENT_LOSS"]
+    },
+    "BTC_REALIZED_CAP_AND_PRICE": {
+        "table_name": "BTC_DATA.DATA.BTC_REALIZED_CAP_AND_PRICE",
+        "date_col": "DATE",
+        "numeric_cols": [
+            "REALIZED_CAP_USD",
+            "REALIZED_PRICE_USD",
+            "TOTAL_UNSPENT_BTC"
+        ]
+    },
+    "CDD": {
+        "table_name": "BTC_DATA.DATA.CDD",
+        "date_col": "DATE",
+        "numeric_cols": ["CDD_RAW", "CDD_30_DMA", "CDD_90_DMA"]
+    },
+    "EXCHANGE_FLOW": {
+        "table_name": "BTC_DATA.DATA.EXCHANGE_FLOW",
+        "date_col": "DAY",
+        "numeric_cols": ["INFLOW", "OUTFLOW", "NETFLOW"]
+    },
+    "HOLDER_REALIZED_PRICES": {
+        "table_name": "BTC_DATA.DATA.HOLDER_REALIZED_PRICES",
+        "date_col": "DATE",
+        "numeric_cols": ["SHORT_TERM_HOLDER_REALIZED_PRICE", "LONG_TERM_HOLDER_REALIZED_PRICE"]
+    },
+    "MVRV": {
+        "table_name": "BTC_DATA.DATA.MVRV",
+        "date_col": "DATE",
+        "numeric_cols": ["MVRV"]
+    },
+    "MVRV_WITH_HOLDER_TYPES": {
+        "table_name": "BTC_DATA.DATA.MVRV_WITH_HOLDER_TYPES",
+        "date_col": "DATE",
+        "numeric_cols": ["OVERALL_MVRV", "STH_MVRV", "LTH_MVRV"]
+    },
     "NUPL": {
         "table_name": "BTC_DATA.DATA.NUPL",
         "date_col": "DATE",
         "numeric_cols": ["NUPL", "NUPL_PERCENT"]
     },
+    "REALIZED_CAP_VS_MARKET_CAP": {
+        "table_name": "BTC_DATA.DATA.REALIZED_CAP_VS_MARKET_CAP",
+        "date_col": "DATE",
+        "numeric_cols": ["MARKET_CAP_USD", "REALIZED_CAP_USD"]
+    },
+    "SOPR": {
+        "table_name": "BTC_DATA.DATA.SOPR",
+        "date_col": "spent_date",
+        "numeric_cols": ["SOPR"]
+    },
+    "SOPR_WITH_HOLDER_TYPES": {
+        "table_name": "BTC_DATA.DATA.SOPR_WITH_HOLDER_TYPES",
+        "date_col": "sale_date",
+        "numeric_cols": ["OVERALL_SOPR","STH_SOPR","LTH_SOPR"]
+    },
+    "TX_COUNT": {
+        "table_name": "BTC_DATA.DATA.TX_COUNT",
+        "date_col": "BLOCK_TIMESTAMP",
+        "numeric_cols": ["TX_COUNT"]
+    },
+    "TX_VOLUME": {
+        "table_name": "BTC_DATA.DATA.TX_VOLUME",
+        "date_col": "DATE",
+        "numeric_cols": ["DAILY_TX_VOLUME_BTC"]
+    },
+    "UTXO_LIFECYCLE": {
+        "table_name": "BTC_DATA.DATA.UTXO_LIFECYCLE",
+        "date_col": "CREATED_TIMESTAMP",
+        "numeric_cols": ["BTC_VALUE"]
+    },
     "PUELL_MULTIPLE": {
         "table_name": "BTC_DATA.DATA.PUELL_MULTIPLE",
         "date_col": "DATE",
-        "numeric_cols": ["MINTED_BTC","DAILY_ISSUANCE_USD","MA_365_ISSUANCE_USD","PUELL_MULTIPLE"]
+        "numeric_cols": [
+            "MINTED_BTC",
+            "DAILY_ISSUANCE_USD",
+            "MA_365_ISSUANCE_USD",
+            "PUELL_MULTIPLE"
+        ]
     },
-    # ... add more tables as needed ...
 }
 
 BTC_PRICE_TABLE = "BTC_DATA.DATA.BTC_PRICE_USD"
@@ -82,9 +155,9 @@ BTC_PRICE_DATE_COL = "DATE"
 BTC_PRICE_VALUE_COL = "BTC_PRICE_USD"
 
 ######################################
-# 5) Title
+# 5) Page Title
 ######################################
-st.title("On-chain Indicators Dashboard")
+st.title("Bitcoin On-chain Indicators Dashboard")
 
 ######################################
 # 6) SIDEBAR Controls
@@ -93,18 +166,17 @@ with st.sidebar:
     st.header("Select On-chain Indicator")
     # Choose one table
     selected_table = st.selectbox(
-        "Pick a Metric Set",
+        "Select a Table (Metric Set)",
         list(TABLE_DICT.keys()),
-        help="Choose which table (on-chain metric set) you want to plot."
+        help="Pick which table (indicator set) to visualize."
     )
-
     table_info = TABLE_DICT[selected_table]
     all_numeric_cols = table_info["numeric_cols"]
     selected_cols = st.multiselect(
-        "Select Column(s):",
+        "Select Indicator(s):",
         all_numeric_cols,
         default=all_numeric_cols,
-        help="Pick one or more columns from the chosen table."
+        help="Pick one or more numeric columns to plot."
     )
 
     st.markdown("---")
@@ -129,8 +201,10 @@ with st.sidebar:
     show_btc_price = st.checkbox("Show BTC Price?", value=True)
     same_axis_checkbox = st.checkbox("Plot BTC Price on same Y-axis?", value=False)
     chart_type_price = st.radio("BTC Price Chart Type", ["Line", "Bars"], index=0)
+    scale_option_price = st.radio("BTC Price Axis", ["Linear", "Log"], index=0)
     detect_cpd = st.checkbox("Detect BTC Price Change Points?", value=False)
-    pen_value = st.number_input("CPD Penalty", min_value=1, max_value=200, value=10)
+    if detect_cpd:
+        pen_value = st.number_input("CPD Penalty", min_value=1, max_value=200, value=10)
 
 ######################################
 # 7) MAIN CHART
