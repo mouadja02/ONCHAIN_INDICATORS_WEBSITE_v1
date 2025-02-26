@@ -440,7 +440,6 @@ with plot_container:
 
     config = {
     'editable': True,
-    'edits': {'shapePosition': True},
     'modeBarButtonsToAdd': [
         'drawline',
         'drawopenpath',
@@ -451,7 +450,6 @@ with plot_container:
     ]
     }
     st.plotly_chart(fig, use_container_width=True, config=config)
-
     
 
 ####################################################
