@@ -1,1 +1,1 @@
-from .my_draw_component import my_draw_component
+from .my_draw_component import st_my_draw_component
