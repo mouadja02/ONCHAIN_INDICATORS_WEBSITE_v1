@@ -221,6 +221,9 @@ with control_container:
     # Option to plot BTC Price on the same axis or secondary axis
     same_axis_checkbox = st.checkbox("Plot BTC Price on the same Y-axis as other Indicators?", value=False)
 
+    # New option: combine all selected indicators on one chart or plot separately
+    combine_indicators = st.checkbox("Combine all selected indicators on one chart", value=True)
+
     st.markdown("---")
     st.markdown("**Customize Colors**")
 
@@ -241,178 +244,292 @@ for i, col in enumerate(selected_columns):
     st.session_state["colors"][col] = picked_color
 
 ####################################################
-# 8) MAIN INDICATORS CHART
+# 8) MAIN INDICATORS CHART(s)
 ####################################################
 plot_container = st.container()
 with plot_container:
-    # Separate out BTC Price from other indicators if present
-    indicator_cols = [col for col in selected_columns if col != BTC_PRICE_VALUE_COL]
-    # Query table-based indicators if any are selected
-    indicator_df = pd.DataFrame()
-    if indicator_cols:
-        columns_for_query = ", ".join(indicator_cols)
-        date_col = table_info["date_col"]
-        indicator_query = f"""
-            SELECT
-                CAST({date_col} AS DATE) AS IND_DATE,
-                {columns_for_query}
-            FROM {table_info['table_name']}
-            WHERE CAST({date_col} AS DATE) >= '{selected_start_date}'
-            ORDER BY IND_DATE
-        """
-        indicator_df = session.sql(indicator_query).to_pandas()
-        indicator_df.rename(columns={"IND_DATE": "DATE"}, inplace=True)
+    if combine_indicators:
+        # ----- COMBINED CHART (all selected indicators in one figure) -----
+        # Separate out BTC Price from other indicators if present
+        indicator_cols = [col for col in selected_columns if col != BTC_PRICE_VALUE_COL]
+        # Query table-based indicators if any are selected
+        indicator_df = pd.DataFrame()
+        if indicator_cols:
+            columns_for_query = ", ".join(indicator_cols)
+            date_col = table_info["date_col"]
+            indicator_query = f"""
+                SELECT
+                    CAST({date_col} AS DATE) AS IND_DATE,
+                    {columns_for_query}
+                FROM {table_info['table_name']}
+                WHERE CAST({date_col} AS DATE) >= '{selected_start_date}'
+                ORDER BY IND_DATE
+            """
+            indicator_df = session.sql(indicator_query).to_pandas()
+            indicator_df.rename(columns={"IND_DATE": "DATE"}, inplace=True)
 
-    # Query BTC Price data if BTC Price is one of the selected indicators
-    btc_price_df = pd.DataFrame()
-    if BTC_PRICE_VALUE_COL in selected_columns:
-        btc_price_query = f"""
-            SELECT
-                CAST({BTC_PRICE_DATE_COL} AS DATE) AS PRICE_DATE,
-                {BTC_PRICE_VALUE_COL}
-            FROM {BTC_PRICE_TABLE}
-            WHERE {BTC_PRICE_VALUE_COL} IS NOT NULL
-              AND CAST({BTC_PRICE_DATE_COL} AS DATE) >= '{selected_start_date}'
-            ORDER BY PRICE_DATE
-        """
-        btc_price_df = session.sql(btc_price_query).to_pandas()
-        btc_price_df.rename(columns={"PRICE_DATE": "DATE"}, inplace=True)
+        # Query BTC Price data if BTC Price is one of the selected indicators
+        btc_price_df = pd.DataFrame()
+        if BTC_PRICE_VALUE_COL in selected_columns:
+            btc_price_query = f"""
+                SELECT
+                    CAST({BTC_PRICE_DATE_COL} AS DATE) AS PRICE_DATE,
+                    {BTC_PRICE_VALUE_COL}
+                FROM {BTC_PRICE_TABLE}
+                WHERE {BTC_PRICE_VALUE_COL} IS NOT NULL
+                  AND CAST({BTC_PRICE_DATE_COL} AS DATE) >= '{selected_start_date}'
+                ORDER BY PRICE_DATE
+            """
+            btc_price_df = session.sql(btc_price_query).to_pandas()
+            btc_price_df.rename(columns={"PRICE_DATE": "DATE"}, inplace=True)
 
-    # Merge data on DATE. If both dataframes exist, use inner join.
-    if not indicator_df.empty and not btc_price_df.empty:
-        merged_df = pd.merge(indicator_df, btc_price_df, on="DATE", how="inner")
-    elif not indicator_df.empty:
-        merged_df = indicator_df
-    elif not btc_price_df.empty:
-        merged_df = btc_price_df
-    else:
-        st.warning("No data returned. Check your date range or table.")
-        st.stop()
-
-    # Calculate EMA if requested
-    if show_ema:
-        for col in selected_columns:
-            merged_df[f"EMA_{col}"] = merged_df[col].ewm(span=ema_period).mean()
-
-    # Build Plotly Figure using a secondary y-axis for BTC Price if needed
-    fig = make_subplots(specs=[[{"secondary_y": True}]])
-
-    for col in selected_columns:
-        # Determine whether this column should use the BTC Price chart type and axis
-        if col == BTC_PRICE_VALUE_COL:
-            secondary_y = not same_axis_checkbox
-            if chart_type_price == "Line":
-                fig.add_trace(
-                    go.Scatter(
-                        x=merged_df["DATE"],
-                        y=merged_df[col],
-                        mode="lines",
-                        name=col,
-                        line=dict(color=st.session_state["colors"][col]),
-                    ),
-                    secondary_y=secondary_y
-                )
-            else:
-                fig.add_trace(
-                    go.Bar(
-                        x=merged_df["DATE"],
-                        y=merged_df[col],
-                        name=col,
-                        marker_color=st.session_state["colors"][col]
-                    ),
-                    secondary_y=secondary_y
-                )
-            # Add EMA trace for BTC Price if enabled
-            if show_ema:
-                fig.add_trace(
-                    go.Scatter(
-                        x=merged_df["DATE"],
-                        y=merged_df[f"EMA_{col}"],
-                        mode="lines",
-                        name=f"EMA({ema_period}) - {col}",
-                        line=dict(color=st.session_state["colors"][col]),
-                    ),
-                    secondary_y=secondary_y
-                )
+        # Merge data on DATE. If both dataframes exist, use inner join.
+        if not indicator_df.empty and not btc_price_df.empty:
+            merged_df = pd.merge(indicator_df, btc_price_df, on="DATE", how="inner")
+        elif not indicator_df.empty:
+            merged_df = indicator_df
+        elif not btc_price_df.empty:
+            merged_df = btc_price_df
         else:
-            # For other indicators, use the chosen chart type on the primary axis
-            if chart_type_indicators == "Line":
-                fig.add_trace(
-                    go.Scatter(
-                        x=merged_df["DATE"],
-                        y=merged_df[col],
-                        mode="lines",
-                        name=col,
-                        line=dict(color=st.session_state["colors"][col]),
-                    ),
-                    secondary_y=False
-                )
+            st.warning("No data returned. Check your date range or table.")
+            st.stop()
+
+        # Calculate EMA if requested
+        if show_ema:
+            for col in selected_columns:
+                merged_df[f"EMA_{col}"] = merged_df[col].ewm(span=ema_period).mean()
+
+        # Build combined Plotly Figure using a secondary y-axis for BTC Price if needed
+        fig = make_subplots(specs=[[{"secondary_y": True}]])
+        for col in selected_columns:
+            if col == BTC_PRICE_VALUE_COL:
+                secondary_y = not same_axis_checkbox
+                if chart_type_price == "Line":
+                    fig.add_trace(
+                        go.Scatter(
+                            x=merged_df["DATE"],
+                            y=merged_df[col],
+                            mode="lines",
+                            name=col,
+                            line=dict(color=st.session_state["colors"][col]),
+                        ),
+                        secondary_y=secondary_y
+                    )
+                else:
+                    fig.add_trace(
+                        go.Bar(
+                            x=merged_df["DATE"],
+                            y=merged_df[col],
+                            name=col,
+                            marker_color=st.session_state["colors"][col]
+                        ),
+                        secondary_y=secondary_y
+                    )
+                if show_ema:
+                    fig.add_trace(
+                        go.Scatter(
+                            x=merged_df["DATE"],
+                            y=merged_df[f"EMA_{col}"],
+                            mode="lines",
+                            name=f"EMA({ema_period}) - {col}",
+                            line=dict(color=st.session_state["colors"][col]),
+                        ),
+                        secondary_y=secondary_y
+                    )
             else:
-                fig.add_trace(
-                    go.Bar(
-                        x=merged_df["DATE"],
-                        y=merged_df[col],
-                        name=col,
-                        marker_color=st.session_state["colors"][col]
-                    ),
-                    secondary_y=False
-                )
-            # Add EMA trace if enabled
-            if show_ema:
-                fig.add_trace(
-                    go.Scatter(
-                        x=merged_df["DATE"],
-                        y=merged_df[f"EMA_{col}"],
-                        mode="lines",
-                        name=f"EMA({ema_period}) - {col}",
-                        line=dict(color=st.session_state["colors"][col]),
-                    ),
-                    secondary_y=False
-                )
+                if chart_type_indicators == "Line":
+                    fig.add_trace(
+                        go.Scatter(
+                            x=merged_df["DATE"],
+                            y=merged_df[col],
+                            mode="lines",
+                            name=col,
+                            line=dict(color=st.session_state["colors"][col]),
+                        ),
+                        secondary_y=False
+                    )
+                else:
+                    fig.add_trace(
+                        go.Bar(
+                            x=merged_df["DATE"],
+                            y=merged_df[col],
+                            name=col,
+                            marker_color=st.session_state["colors"][col]
+                        ),
+                        secondary_y=False
+                    )
+                if show_ema:
+                    fig.add_trace(
+                        go.Scatter(
+                            x=merged_df["DATE"],
+                            y=merged_df[f"EMA_{col}"],
+                            mode="lines",
+                            name=f"EMA({ema_period}) - {col}",
+                            line=dict(color=st.session_state["colors"][col]),
+                        ),
+                        secondary_y=False
+                    )
 
-    # Dynamic title
-    fig_title = f"{selected_table} with Selected Indicators"
-    fig.update_layout(
-        paper_bgcolor="#000000",
-        plot_bgcolor="#000000",
-        title=fig_title,
-        hovermode="x unified",
-        font=dict(color="#f0f2f6"),
-        legend=dict(
-            x=0,
-            y=1.05,
-            bgcolor="rgba(0,0,0,0)",
-            orientation="h"
+        fig_title = f"BITCOIN : {selected_table} (Combined Chart)"
+        fig.update_layout(
+            paper_bgcolor="#000000",
+            plot_bgcolor="#000000",
+            title=fig_title,
+            hovermode="x unified",
+            font=dict(color="#f0f2f6"),
+            legend=dict(
+                x=0,
+                y=1.05,
+                bgcolor="rgba(0,0,0,0)",
+                orientation="h"
+            )
         )
-    )
-    fig.update_xaxes(title_text="Date", gridcolor="#4f5b66")
-    # Left Y-axis for on-chain indicators
-    fig.update_yaxes(
-        title_text="Indicator Value",
-        type="log" if scale_option_indicator == "Log" else "linear",
-        secondary_y=False,
-        gridcolor="#4f5b66"
-    )
-    # Right Y-axis for BTC Price if using secondary axis
-    fig.update_yaxes(
-        title_text="BTC Price (USD)" if not same_axis_checkbox else "",
-        type="log" if scale_option_price == "Log" else "linear",
-        secondary_y=True,
-        gridcolor="#4f5b66"
-    )
-
-    config = {
-        'editable': True,
-        'modeBarButtonsToAdd': [
-            'drawline',
-            'drawopenpath',
-            'drawclosedpath',
-            'drawcircle',
-            'drawrect',
-            'eraseshape'
-        ]
-    }
-    st.plotly_chart(fig, use_container_width=True, config=config)
+        fig.update_xaxes(title_text="Date", gridcolor="#4f5b66")
+        fig.update_yaxes(
+            title_text="Indicator Value",
+            type="log" if scale_option_indicator == "Log" else "linear",
+            secondary_y=False,
+            gridcolor="#4f5b66"
+        )
+        fig.update_yaxes(
+            title_text="BTC Price (USD)" if not same_axis_checkbox else "",
+            type="log" if scale_option_price == "Log" else "linear",
+            secondary_y=True,
+            gridcolor="#4f5b66"
+        )
+        config = {
+            'editable': True,
+            'modeBarButtonsToAdd': [
+                'drawline',
+                'drawopenpath',
+                'drawclosedpath',
+                'drawcircle',
+                'drawrect',
+                'eraseshape'
+            ]
+        }
+        st.plotly_chart(fig, use_container_width=True, config=config)
+    else:
+        # ----- SEPARATE CHARTS (one chart per selected indicator) -----
+        for col in selected_columns:
+            if col == BTC_PRICE_VALUE_COL:
+                # Query BTC Price
+                btc_price_query = f"""
+                    SELECT
+                        CAST({BTC_PRICE_DATE_COL} AS DATE) AS DATE,
+                        {BTC_PRICE_VALUE_COL}
+                    FROM {BTC_PRICE_TABLE}
+                    WHERE {BTC_PRICE_VALUE_COL} IS NOT NULL
+                      AND CAST({BTC_PRICE_DATE_COL} AS DATE) >= '{selected_start_date}'
+                    ORDER BY DATE
+                """
+                df = session.sql(btc_price_query).to_pandas()
+                df.rename(columns={"DATE": "DATE"}, inplace=True)
+                color = st.session_state["colors"][col]
+                fig = go.Figure()
+                if chart_type_price == "Line":
+                    fig.add_trace(
+                        go.Scatter(
+                            x=df["DATE"],
+                            y=df[col],
+                            mode="lines",
+                            name=col,
+                            line=dict(color=color)
+                        )
+                    )
+                else:
+                    fig.add_trace(
+                        go.Bar(
+                            x=df["DATE"],
+                            y=df[col],
+                            name=col,
+                            marker_color=color
+                        )
+                    )
+                if show_ema:
+                    df[f"EMA_{col}"] = df[col].ewm(span=ema_period).mean()
+                    fig.add_trace(
+                        go.Scatter(
+                            x=df["DATE"],
+                            y=df[f"EMA_{col}"],
+                            mode="lines",
+                            name=f"EMA({ema_period}) - {col}",
+                            line=dict(color=color)
+                        )
+                    )
+                fig.update_layout(
+                    title=f"{col}",
+                    paper_bgcolor="#000000",
+                    plot_bgcolor="#000000",
+                    font=dict(color="#f0f2f6"),
+                    hovermode="x unified"
+                )
+                fig.update_xaxes(title_text="Date", gridcolor="#4f5b66")
+                fig.update_yaxes(
+                    title_text="Value",
+                    type="log" if scale_option_price == "Log" else "linear",
+                    gridcolor="#4f5b66"
+                )
+                st.plotly_chart(fig, use_container_width=True)
+            else:
+                # Query for on-chain indicator
+                date_col = table_info["date_col"]
+                query = f"""
+                    SELECT
+                        CAST({date_col} AS DATE) AS DATE,
+                        {col}
+                    FROM {table_info['table_name']}
+                    WHERE CAST({date_col} AS DATE) >= '{selected_start_date}'
+                    ORDER BY DATE
+                """
+                df = session.sql(query).to_pandas()
+                df.rename(columns={"DATE": "DATE"}, inplace=True)
+                color = st.session_state["colors"][col]
+                fig = go.Figure()
+                if chart_type_indicators == "Line":
+                    fig.add_trace(
+                        go.Scatter(
+                            x=df["DATE"],
+                            y=df[col],
+                            mode="lines",
+                            name=col,
+                            line=dict(color=color)
+                        )
+                    )
+                else:
+                    fig.add_trace(
+                        go.Bar(
+                            x=df["DATE"],
+                            y=df[col],
+                            name=col,
+                            marker_color=color
+                        )
+                    )
+                if show_ema:
+                    df[f"EMA_{col}"] = df[col].ewm(span=ema_period).mean()
+                    fig.add_trace(
+                        go.Scatter(
+                            x=df["DATE"],
+                            y=df[f"EMA_{col}"],
+                            mode="lines",
+                            name=f"EMA({ema_period}) - {col}",
+                            line=dict(color=color)
+                        )
+                    )
+                fig.update_layout(
+                    title=f"{col}",
+                    paper_bgcolor="#000000",
+                    plot_bgcolor="#000000",
+                    font=dict(color="#f0f2f6"),
+                    hovermode="x unified"
+                )
+                fig.update_xaxes(title_text="Date", gridcolor="#4f5b66")
+                fig.update_yaxes(
+                    title_text="Value",
+                    type="log" if scale_option_indicator == "Log" else "linear",
+                    gridcolor="#4f5b66"
+                )
+                st.plotly_chart(fig, use_container_width=True)
 
 ####################################################
 # 9) ADDRESS BALANCE BANDS SECTION (with EMA)
@@ -446,7 +563,6 @@ with colA:
 with colB:
     scale_option_bands = st.radio("Y-axis Scale for Bands", ["Linear", "Log"], index=0)
 with colC:
-    # EMA Option for the bands
     show_bands_ema = st.checkbox("Add EMA for Bands?", value=False)
     if show_bands_ema:
         bands_ema_period = st.number_input(
@@ -493,9 +609,7 @@ if show_bands_ema:
 
 # -- 9.7) Plotly chart with each selected band as a separate line
 fig_bands = go.Figure()
-
 for band in selected_bands:
-    # Original band trace
     fig_bands.add_trace(
         go.Scatter(
             x=pivot_df["DAY"],
@@ -504,7 +618,6 @@ for band in selected_bands:
             name=band
         )
     )
-    # If EMA is enabled, add a dashed line for the EMA
     if show_bands_ema:
         ema_col = f"EMA_{band}"
         fig_bands.add_trace(
@@ -539,4 +652,3 @@ fig_bands.update_yaxes(
 )
 
 st.plotly_chart(fig_bands, use_container_width=True)
-
