@@ -4,6 +4,7 @@ import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 import datetime
 import random
+import ruptures as rpt
 
 ######################################
 # 1) Page Configuration & Dark Theme
@@ -54,7 +55,6 @@ if "color_palette" not in st.session_state:
 
 if "assigned_colors" not in st.session_state:
     st.session_state["assigned_colors"] = {}
-
 if "colors" not in st.session_state:
     st.session_state["colors"] = {}
 
@@ -70,7 +70,7 @@ TABLE_DICT = {
     "ADDRESSES_PROFIT_LOSS_PERCENT": {
         "table_name": "BTC_DATA.DATA.ADDRESSES_PROFIT_LOSS_PERCENT",
         "date_col": "sale_date", 
-        "numeric_cols": ["PERCENT_PROFIT","PERCENT_LOSS"]
+        "numeric_cols": ["PERCENT_PROFIT", "PERCENT_LOSS"]
     },
     "BTC_REALIZED_CAP_AND_PRICE": {
         "table_name": "BTC_DATA.DATA.BTC_REALIZED_CAP_AND_PRICE",
@@ -86,49 +86,35 @@ TABLE_DICT = {
         "date_col": "DATE",
         "numeric_cols": ["CDD_RAW", "CDD_30_DMA", "CDD_90_DMA"]
     },
-    "EXCHANGE_FLOW" : {
+    "EXCHANGE_FLOW": {
         "table_name": "BTC_DATA.DATA.EXCHANGE_FLOW",
         "date_col": "DAY",
-        "numeric_cols": [
-            "INFLOW","OUTFLOW","NETFLOW"
-        ]
+        "numeric_cols": ["INFLOW", "OUTFLOW", "NETFLOW"]
     },
-    "HOLDER_REALIZED_PRICES" : {
+    "HOLDER_REALIZED_PRICES": {
         "table_name": "BTC_DATA.DATA.HOLDER_REALIZED_PRICES",
         "date_col": "DATE",
-        "numeric_cols": [
-            "SHORT_TERM_HOLDER_REALIZED_PRICE","LONG_TERM_HOLDER_REALIZED_PRICE"
-        ]
+        "numeric_cols": ["SHORT_TERM_HOLDER_REALIZED_PRICE", "LONG_TERM_HOLDER_REALIZED_PRICE"]
     },
     "MVRV": {
         "table_name": "BTC_DATA.DATA.MVRV",
         "date_col": "DATE",
-        "numeric_cols": [
-            "MVRV"
-        ]
-    },    
+        "numeric_cols": ["MVRV"]
+    },
     "MVRV_WITH_HOLDER_TYPES": {
         "table_name": "BTC_DATA.DATA.MVRV_WITH_HOLDER_TYPES",
         "date_col": "DATE",
-        "numeric_cols": [
-            "OVERALL_MVRV","STH_MVRV","LTH_MVRV"
-        ]
+        "numeric_cols": ["OVERALL_MVRV", "STH_MVRV", "LTH_MVRV"]
     },
     "NUPL": {
         "table_name": "BTC_DATA.DATA.NUPL",
         "date_col": "DATE",
-        "numeric_cols": [
-            "NUPL",
-            "NUPL_PERCENT"
-        ]
+        "numeric_cols": ["NUPL", "NUPL_PERCENT"]
     },
     "REALIZED_CAP_VS_MARKET_CAP": {
         "table_name": "BTC_DATA.DATA.REALIZED_CAP_VS_MARKET_CAP",
         "date_col": "DATE",
-        "numeric_cols": [
-            "MARKET_CAP_USD",
-            "REALIZED_CAP_USD"
-        ]
+        "numeric_cols": ["MARKET_CAP_USD", "REALIZED_CAP_USD"]
     },
     "SOPR": {
         "table_name": "BTC_DATA.DATA.SOPR",
@@ -138,7 +124,7 @@ TABLE_DICT = {
     "SOPR_WITH_HOLDER_TYPES": {
         "table_name": "BTC_DATA.DATA.SOPR_WITH_HOLDER_TYPES",
         "date_col": "sale_date",
-        "numeric_cols": ["OVERALL_SOPR","STH_SOPR","LTH_SOPR"]
+        "numeric_cols": ["OVERALL_SOPR", "STH_SOPR", "LTH_SOPR"]
     },
     "TX_COUNT": {
         "table_name": "BTC_DATA.DATA.TX_COUNT",
@@ -158,12 +144,7 @@ TABLE_DICT = {
     "PUELL_MULTIPLE": {
         "table_name": "BTC_DATA.DATA.PUELL_MULTIPLE",
         "date_col": "DATE",
-        "numeric_cols": [
-            "MINTED_BTC",
-            "DAILY_ISSUANCE_USD",
-            "MA_365_ISSUANCE_USD",
-            "PUELL_MULTIPLE"
-        ]
+        "numeric_cols": ["MINTED_BTC", "DAILY_ISSUANCE_USD", "MA_365_ISSUANCE_USD", "PUELL_MULTIPLE"]
     },
 }
 
@@ -191,7 +172,7 @@ plotting_mode = st.radio(
 # 7) Plotting Controls & Chart Building
 ######################################
 if plotting_mode == "Single Table Plot":
-    # ----- NORMAL / SINGLE TABLE PLOTTING -----
+    # ----- SINGLE TABLE PLOTTING MODE -----
     control_container = st.container()
     with control_container:
         st.subheader("Chart Controls – Single Table Plot")
@@ -225,20 +206,19 @@ if plotting_mode == "Single Table Plot":
         if show_ema:
             ema_period = st.number_input("EMA Period (days)", min_value=2, max_value=200, value=20)
     
-        # Date & BTC Price toggle
+        # Date & BTC Price toggles
         col5, col6 = st.columns(2)
         with col5:
             default_start_date = datetime.date(2015, 1, 1)
-            selected_start_date = st.date_input(
-                "Start Date",
-                value=default_start_date,
-                help="Filter data from this date onward."
-            )
+            selected_start_date = st.date_input("Start Date", value=default_start_date, help="Filter data from this date onward.")
         with col6:
             show_btc_price = st.checkbox("Show BTC Price?", value=True)
     
         # Option: Plot BTC Price on same axis or secondary axis
         same_axis_checkbox = st.checkbox("Plot BTC Price on the same Y-axis as Indicators?", value=False)
+    
+        # New CPD option for BTC Price
+        detect_cpd = st.checkbox("Detect Change Points on BTC Price", value=False)
     
         st.markdown("---")
         st.markdown("**Customize Colors**")
@@ -267,7 +247,7 @@ if plotting_mode == "Single Table Plot":
         st.session_state["assigned_colors"]["BTC_PRICE"] = picked_btc_color
         st.session_state["colors"]["BTC_PRICE"] = picked_btc_color
     
-    # ----- QUERY & PLOT -----
+    # ----- QUERY & PLOT SINGLE TABLE DATA -----
     plot_container = st.container()
     with plot_container:
         # Query BTC Price if requested
@@ -285,7 +265,7 @@ if plotting_mode == "Single Table Plot":
             btc_price_df = session.sql(btc_price_query).to_pandas()
             btc_price_df.rename(columns={"PRICE_DATE": "DATE"}, inplace=True)
     
-        # Query Selected Indicator(s)
+        # Query the selected table indicators
         date_col = table_info["date_col"]
         columns_for_query = ", ".join(selected_columns)
         indicator_query = f"""
@@ -303,7 +283,7 @@ if plotting_mode == "Single Table Plot":
             st.warning("No data returned. Check your date range or table.")
             st.stop()
     
-        # Merge if BTC Price is shown
+        # Merge data if BTC Price is shown
         if show_btc_price and not btc_price_df.empty:
             merged_df = pd.merge(btc_price_df, indicator_df, on="DATE", how="inner")
         else:
@@ -318,9 +298,8 @@ if plotting_mode == "Single Table Plot":
             for col in selected_columns:
                 merged_df[f"EMA_{col}"] = merged_df[col].ewm(span=ema_period).mean()
     
-        # Build Plotly Figure
+        # Build the Plotly Figure
         fig = make_subplots(specs=[[{"secondary_y": True}]])
-        # Plot each indicator on primary y-axis
         for col in selected_columns:
             if chart_type_indicators == "Line":
                 fig.add_trace(
@@ -329,7 +308,7 @@ if plotting_mode == "Single Table Plot":
                         y=merged_df[col],
                         mode="lines",
                         name=col,
-                        line=dict(color=st.session_state["colors"][col]),
+                        line=dict(color=st.session_state["colors"][col])
                     ),
                     secondary_y=False
                 )
@@ -350,12 +329,12 @@ if plotting_mode == "Single Table Plot":
                         y=merged_df[f"EMA_{col}"],
                         mode="lines",
                         name=f"EMA({ema_period}) - {col}",
-                        line=dict(color=st.session_state["colors"][col]),
+                        line=dict(color=st.session_state["colors"][col])
                     ),
                     secondary_y=False
                 )
     
-        # Plot BTC Price if selected
+        # Plot BTC Price if requested
         if show_btc_price and not btc_price_df.empty:
             price_secondary_y = not same_axis_checkbox
             if chart_type_price == "Line":
@@ -365,7 +344,7 @@ if plotting_mode == "Single Table Plot":
                         y=merged_df[BTC_PRICE_VALUE_COL],
                         mode="lines",
                         name="BTC Price (USD)",
-                        line=dict(color=st.session_state["colors"]["BTC_PRICE"]),
+                        line=dict(color=st.session_state["colors"]["BTC_PRICE"])
                     ),
                     secondary_y=price_secondary_y
                 )
@@ -380,7 +359,19 @@ if plotting_mode == "Single Table Plot":
                     secondary_y=price_secondary_y
                 )
     
-        # Dynamic title
+        # If CPD is enabled, detect change points on BTC Price data.
+        # In single table mode, BTC Price is in column BTC_PRICE_VALUE_COL.
+        if show_btc_price and detect_cpd and BTC_PRICE_VALUE_COL in merged_df.columns:
+            btc_series = merged_df[BTC_PRICE_VALUE_COL].dropna()
+            if not btc_series.empty:
+                algo = rpt.Pelt(model="rbf").fit(btc_series.values)
+                # You can adjust the penalty (pen) as needed.
+                change_points = algo.predict(pen=10)
+                for cp in change_points:
+                    if cp < len(merged_df):
+                        cp_date = merged_df["DATE"].iloc[cp]
+                        fig.add_vline(x=cp_date, line_width=2, line_dash="dash", line_color="white")
+    
         fig_title = f"{selected_table} vs BTC Price" if show_btc_price else f"{selected_table}"
         fig.update_layout(
             paper_bgcolor="#000000",
@@ -406,18 +397,15 @@ if plotting_mode == "Single Table Plot":
     
         config = {
             'editable': True,
-            'modeBarButtonsToAdd': [
-                'drawline', 'drawopenpath', 'drawclosedpath', 'drawcircle', 'drawrect', 'eraseshape'
-            ]
+            'modeBarButtonsToAdd': ['drawline','drawopenpath','drawclosedpath','drawcircle','drawrect','eraseshape']
         }
         st.plotly_chart(fig, use_container_width=True, config=config)
 
 else:
-    # ----- MULTI-INDICATORS PLOTTING: Combine Tables into One Chart -----
+    # ----- MULTI-INDICATORS PLOTTING MODE -----
     control_container = st.container()
     with control_container:
         st.subheader("Chart Controls – Multi-Indicators Plot")
-        # Let user select one or more tables to combine (order preserved)
         selected_tables = st.multiselect(
             "Select one or more tables to combine:",
             list(TABLE_DICT.keys()),
@@ -425,7 +413,6 @@ else:
             help="Pick multiple tables. Their indicators will be merged on the DATE field."
         )
     
-        # For each selected table, allow the user to pick which indicators to include.
         table_indicators = {}
         for tbl in selected_tables:
             default_cols = TABLE_DICT[tbl]["numeric_cols"]
@@ -436,10 +423,8 @@ else:
                 key=f"{tbl}_indicators"
             )
     
-        # Option to include BTC Price as an additional indicator.
         include_btc = st.checkbox("Include BTC Price as an Indicator", value=True)
     
-        # Common chart options
         col1, col2, col3 = st.columns(3)
         with col1:
             scale_option = st.radio("Y-Axis Scale", ["Linear", "Log"], index=0)
@@ -448,20 +433,19 @@ else:
         with col3:
             same_axis_checkbox = st.checkbox("Plot BTC Price on same Y-axis?", value=False)
     
-        # EMA options
         show_ema = st.checkbox("Add EMA to indicators", value=False)
         if show_ema:
             ema_period = st.number_input("EMA Period (days)", min_value=2, max_value=200, value=20)
     
-        # Date range selector (all queries filter from this date onward)
         default_start_date = datetime.date(2015, 1, 1)
         selected_start_date = st.date_input("Start Date", value=default_start_date, help="Filter data from this date onward.")
+    
+        # New CPD option for multi-indicators mode (BTC Price will be renamed to "BTC_PRICE")
+        detect_cpd = st.checkbox("Detect Change Points on BTC Price", value=False)
     
         st.markdown("---")
         st.markdown("**Customize Colors**")
     
-    # ----- ASSIGN COLORS FOR COMBINED INDICATORS -----
-    # Build a unique list of indicator names (prefix with table name)
     combined_indicators = []
     for tbl, cols in table_indicators.items():
         for col in cols:
@@ -478,7 +462,6 @@ else:
         st.session_state["assigned_colors"][ind] = picked_color
         st.session_state["colors"][ind] = picked_color
     
-    # ----- QUERY & MERGE DATAFRAMES -----
     plot_container = st.container()
     with plot_container:
         df_list = []
@@ -530,7 +513,6 @@ else:
                     continue
                 merged_df[f"EMA_{col}"] = merged_df[col].ewm(span=ema_period).mean()
     
-        # ----- BUILD COMBINED FIGURE -----
         fig = make_subplots(specs=[[{"secondary_y": True}]])
         for col in merged_df.columns:
             if col == "DATE":
@@ -569,6 +551,16 @@ else:
                         ),
                         secondary_y=secondary_y
                     )
+                # CPD on BTC_PRICE in multi mode
+                if detect_cpd and "BTC_PRICE" in merged_df.columns:
+                    btc_series = merged_df["BTC_PRICE"].dropna()
+                    if not btc_series.empty:
+                        algo = rpt.Pelt(model="rbf").fit(btc_series.values)
+                        change_points = algo.predict(pen=10)
+                        for cp in change_points:
+                            if cp < len(merged_df):
+                                cp_date = merged_df["DATE"].iloc[cp]
+                                fig.add_vline(x=cp_date, line_width=2, line_dash="dash", line_color="white")
             else:
                 if chart_type == "Line":
                     fig.add_trace(
@@ -628,12 +620,12 @@ else:
     
         config = {
             'editable': True,
-            'modeBarButtonsToAdd': ['drawline', 'drawopenpath', 'drawclosedpath', 'drawcircle', 'drawrect', 'eraseshape']
+            'modeBarButtonsToAdd': ['drawline','drawopenpath','drawclosedpath','drawcircle','drawrect','eraseshape']
         }
         st.plotly_chart(fig, use_container_width=True, config=config)
 
 ######################################
-# 9) ADDRESS BALANCE BANDS SECTION (unchanged)
+# 8) ADDRESS BALANCE BANDS SECTION (unchanged)
 ######################################
 st.header("Address Balance Bands Over Time")
 band_query = """
