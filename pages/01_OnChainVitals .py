@@ -66,6 +66,11 @@ TABLE_DICT = {
         "date_col": "DATE",
         "numeric_cols": ["REALIZED_CAP_USD", "REALIZED_PRICE_USD", "TOTAL_UNSPENT_BTC"]
     },
+    "BTC_PRICE_USD": {
+        "table_name": "BTC_DATA.DATA.BTC_PRICE_USD",
+        "date_col": "DATE",
+        "numeric_cols": ["BTC_PRICE_USD"]
+    },
     "CDD": {
         "table_name": "BTC_DATA.DATA.CDD",
         "date_col": "DATE",
