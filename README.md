@@ -1,6 +1,6 @@
 # Bitcoin On-chain Analytics Dashboard
 
-This project is a collection of interactive Streamlit applications designed for on-chain analysis of Bitcoin data. It connects to a Snowflake data warehouse (populated via Azure Data Factory, for example) and provides detailed visualizations of on-chain metrics and address balance bands. The project helps analysts and investors understand blockchain trends, network activity, and market behavior.
+This project is a collection of interactive Streamlit applications designed for on-chain analysis of Bitcoin data. It connects to a Snowflake data warehouse and provides detailed visualizations of on-chain metrics and address balance bands. The project helps analysts and investors understand blockchain trends, network activity, and market behavior.
 
 ## Overview
 
