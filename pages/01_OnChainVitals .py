@@ -541,43 +541,6 @@ fig_bands.update_yaxes(
 st.plotly_chart(fig_bands, use_container_width=True)
 
 """
-import streamlit as st
-import pandas as pd
-import plotly.graph_objects as go
-from plotly.subplots import make_subplots
-import datetime
-import random
-
-# Set page config at the TOP of the file
-st.set_page_config(
-    page_title="Bitcoin On-chain Indicators Dashboard",
-    layout="wide",
-    initial_sidebar_state="expanded"
-)
-
-######################################
-# 1) Dark Theme Styling (full black background)
-######################################
-st.markdown(
-    """
-    <style>
-    body {
-        background-color: #000000;
-        color: #f0f2f6;
-    }
-    .css-18e3th9, .css-1dp5vir, .css-12oz5g7, .st-bq {
-        background-color: #000000 !important;
-    }
-    .css-15zrgzn, .css-1hynb2t, .css-1xh633b, .css-17eq0hr {
-        color: #f0f2f6;
-    }
-    .css-1xh633b a {
-        color: #1FA2FF;
-    }
-    </style>
-    """,
-    unsafe_allow_html=True
-)
 
 ######################################
 # 2) Snowflake Connection
