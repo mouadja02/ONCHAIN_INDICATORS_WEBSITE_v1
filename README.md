@@ -50,10 +50,10 @@ This app focuses on visualizing the distribution of Bitcoin address balances ove
 - **Ruptures** – For time series change point detection.
 - **Python Standard Libraries** – Including `datetime` and `random`.
 
-
+## Future Enhancments
 ### UI/UX Enhancements
-- Styled with a dark theme (similar to Glassnode or BitcoinMagazinePro).
-- Future improvements could include more advanced sidebar filtering and grouping.
+- UI similar to Glassnode or BitcoinMagazinePro.
+- More advanced sidebar filtering and grouping.
 
 ### Additional Metrics & Views
 - Expand with more on-chain metrics and detailed block/transaction views.
