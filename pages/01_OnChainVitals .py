@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
+from plotly.express import make_subplots
 import datetime
 import random
 
@@ -409,6 +410,7 @@ with plot_container:
     fig_title = f"{selected_table} vs BTC Price" if show_btc_price else f"{selected_table}"
 
     fig.update_layout(
+        editable = True,
         paper_bgcolor="#000000",
         plot_bgcolor="#000000",
         title=fig_title,
@@ -557,6 +559,7 @@ for band in selected_bands:
         )
 
 fig_bands.update_layout(
+    editable = True,
     paper_bgcolor="#000000",
     plot_bgcolor="#000000",
     title="Daily Address Count by Balance Band",
