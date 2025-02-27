@@ -2,10 +2,12 @@ import streamlit as st
 import pandas as pd
 import plotly.express as px
 
+
 # Streamlit UI setup
 st.set_page_config(page_title="Bitcoin HODL Waves", layout="wide")
 st.title("Bitcoin HODL Waves Visualization")
-
+cx = st.connection("snowflake")
+session = cx.session()
 
 # Query Data
 query = """
@@ -13,7 +15,7 @@ query = """
     FROM HODL_Waves
     ORDER BY SNAPSHOT_DATE, AGE_BUCKET
 """
-session.sql(query).to_pandas()
+df = session.sql(query).to_pandas()
 
 
 # Convert date column to datetime
