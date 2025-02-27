@@ -67,7 +67,7 @@ TABLE_DICT = {
     "ADDRESSES PROFIT LOSS PERCENT": {
         "table_name": "BTC_DATA.DATA.ADDRESSES_PROFIT_LOSS_PERCENT",
         "date_col": "sale_date", 
-        "numeric_cols": ["PERCENT_PROFIT","PERCENT_LOSS"]
+        "numeric_cols": ["PERCENT_PROFIT", "PERCENT_LOSS"]
     },
     "REALIZED CAP AND PRICE": {
         "table_name": "BTC_DATA.DATA.BTC_REALIZED_CAP_AND_PRICE",
@@ -121,12 +121,12 @@ TABLE_DICT = {
     "SOPR WITH HOLDER TYPES": {
         "table_name": "BTC_DATA.DATA.SOPR_WITH_HOLDER_TYPES",
         "date_col": "sale_date",
-        "numeric_cols": ["OVERALL_SOPR","STH_SOPR","LTH_SOPR"]
+        "numeric_cols": ["OVERALL_SOPR", "STH_SOPR", "LTH_SOPR"]
     },
     "STOCK TO FLOW MODEL": {
         "table_name": "BTC_DATA.DATA.STOCK_TO_FLOW_MODEL",
         "date_col": "DATE",
-        "numeric_cols": ["STOCK","FLOW","STOCK_TO_FLOW","MODEL_PRICE"]
+        "numeric_cols": ["STOCK", "FLOW", "STOCK_TO_FLOW", "MODEL_PRICE"]
     },
     "TX COUNT": {
         "table_name": "BTC_DATA.DATA.TX_COUNT",
@@ -151,6 +151,14 @@ TABLE_DICT = {
             "DAILY_ISSUANCE_USD",
             "MA_365_ISSUANCE_USD",
             "PUELL_MULTIPLE"
+        ]
+    },
+    "HODL WAVES": {
+        "table_name": "BTC_DATA.DATA.HODL_WAVES",
+        "date_col": "SNAPSHOT_DATE",
+        "numeric_cols": [
+            "LT1D", "D1_1W", "W1_1M", "M1_3M", "M3_6M", 
+            "M6_12M", "Y1_2Y", "Y2_3Y", "Y3_5Y", "Y5_7Y", "Y7_10Y", "GTE10Y"
         ]
     },
 }
@@ -318,7 +326,7 @@ for col in selected_cols:
             )
 
 # Plot BTC Price on secondary (or same) axis
-if show_btc_price and "BTC_PRICE_USD" in df_btc.columns:
+if show_btc_price and BTC_PRICE_VALUE_COL in df_btc.columns:
     price_secondary = not same_axis_checkbox
     if chart_type_price == "Line":
         fig.add_trace(
