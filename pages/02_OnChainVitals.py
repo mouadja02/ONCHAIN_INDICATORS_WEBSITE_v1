@@ -155,11 +155,9 @@ TABLE_DICT = {
     },
     "HODL WAVES": {
         "table_name": "BTC_DATA.DATA.HODL_WAVES",
-        # Use SNAPSHOT_DATE as the date column
         "date_col": "SNAPSHOT_DATE",
-        # We only have one numeric column, but we'll pivot the data using AGE_BUCKET values.
-        "numeric_cols": ["PERCENT_SUPPLY"],
-        # Provide a flag so we know to use a custom pivot query.
+        # For HODL WAVES, our table contains three columns: SNAPSHOT_DATE, AGE_BUCKET, and PERCENT_SUPPLY.
+        # We'll use a custom query to pivot the data.
         "custom_query": True
     },
 }
@@ -185,9 +183,9 @@ with st.sidebar:
         help="Pick which table (indicator set) to visualize."
     )
     table_info = TABLE_DICT[selected_table]
-    if "custom_query" in table_info and table_info["custom_query"]:
-        # For HODL WAVES we use a custom pivot query.
-        selected_cols = []  # not used in custom query
+    if table_info.get("custom_query", False) and selected_table == "HODL WAVES":
+        # For HODL WAVES, we use a custom query so no column selection is needed.
+        selected_cols = []
     else:
         all_numeric_cols = table_info["numeric_cols"]
         selected_cols = st.multiselect(
@@ -227,7 +225,7 @@ with st.sidebar:
 ######################################
 # 7) MAIN CHART
 ######################################
-if ("custom_query" not in table_info) or (not table_info.get("custom_query", False)):
+if (("custom_query" not in table_info) or (not table_info.get("custom_query", False))):
     if not selected_cols:
         st.warning("Please select at least one indicator column.")
         st.stop()
@@ -250,35 +248,37 @@ if show_btc_price:
     st.session_state["assigned_colors"]["BTC_PRICE"] = picked_btc_color
     st.session_state["colors"]["BTC_PRICE"] = picked_btc_color
 
-# Build query based on whether custom query is needed
+# Build query based on whether a custom query is needed
 if table_info.get("custom_query", False) and selected_table == "HODL WAVES":
-    # For HODL WAVES, pivot the tall table into wide format.
+    # For HODL WAVES, pivot the tall table into a wide format.
+    # We cannot alias pivot expressions directly in Snowflake; instead, we wrap the pivot in a CTE and then alias in an outer SELECT.
     query = f"""
-        SELECT *
-        FROM (
-            SELECT 
-                SNAPSHOT_DATE, 
-                AGE_BUCKET, 
-                PERCENT_SUPPLY
-            FROM {table_info['table_name']}
-            WHERE CAST(SNAPSHOT_DATE AS DATE) >= '{selected_start_date}'
-        )
-        PIVOT (
-            MAX(PERCENT_SUPPLY) FOR AGE_BUCKET IN (
-                '<1d' AS LT1D, 
-                '1d-1w' AS D1_1W, 
-                '1w-1m' AS W1_1M, 
-                '1m-3m' AS M1_3M, 
-                '3m-6m' AS M3_6M, 
-                '6m-12m' AS M6_12M, 
-                '1y-2y' AS Y1_2Y, 
-                '2y-3y' AS Y2_3Y, 
-                '3y-5y' AS Y3_5Y, 
-                '5y-7y' AS Y5_7Y, 
-                '7y-10y' AS Y7_10Y, 
-                '>=10y' AS GTE10Y
+        WITH pivoted AS (
+            SELECT *
+            FROM (
+                SELECT SNAPSHOT_DATE, AGE_BUCKET, PERCENT_SUPPLY
+                FROM {table_info['table_name']}
+                WHERE CAST(SNAPSHOT_DATE AS DATE) >= '{selected_start_date}'
+            )
+            PIVOT (
+                MAX(PERCENT_SUPPLY) FOR AGE_BUCKET IN ('<1d','1d-1w','1w-1m','1m-3m','3m-6m','6m-12m','1y-2y','2y-3y','3y-5y','5y-7y','7y-10y','>=10y')
             )
         )
+        SELECT 
+            SNAPSHOT_DATE,
+            "<1d" AS LT1D,
+            "1d-1w" AS D1_1W,
+            "1w-1m" AS W1_1M,
+            "1m-3m" AS M1_3M,
+            "3m-6m" AS M3_6M,
+            "6m-12m" AS M6_12M,
+            "1y-2y" AS Y1_2Y,
+            "2y-3y" AS Y2_3Y,
+            "3y-5y" AS Y3_5Y,
+            "5y-7y" AS Y5_7Y,
+            "7y-10y" AS Y7_10Y,
+            ">=10y" AS GTE10Y
+        FROM pivoted
         ORDER BY SNAPSHOT_DATE
     """
 else:
@@ -308,7 +308,7 @@ if show_btc_price:
     """
     df_btc = session.sql(btc_query).to_pandas()
 
-# Instead of an inner join, we perform an outer merge to cover full date range.
+# Instead of an inner join, perform an outer merge to cover the full date range.
 if show_btc_price and not df_btc.empty:
     merged_df = pd.merge(df_btc, df_indicators, on="DATE", how="outer")
     merged_df.sort_values("DATE", inplace=True)
@@ -320,7 +320,7 @@ if merged_df.empty:
     st.stop()
 
 # Calculate EMA if selected
-if show_ema:
+if show_ema and not table_info.get("custom_query", False):
     for col in selected_cols:
         merged_df[f"EMA_{col}"] = merged_df[col].ewm(span=ema_period).mean()
 
@@ -365,9 +365,8 @@ if not table_info.get("custom_query", False):
                     secondary_y=False
                 )
 else:
-    # For HODL WAVES, plot each age bucket as a separate trace.
-    # We'll consider the pivoted columns (if available) and plot each.
-    pivot_columns = [col for col in merged_df.columns if col not in ["SNAPSHOT_DATE", "DATE"]]
+    # For HODL WAVES, use SNAPSHOT_DATE as the x-axis and plot each pivoted age bucket.
+    pivot_columns = [col for col in merged_df.columns if col.upper() not in ["SNAPSHOT_DATE", "DATE"]]
     for col in pivot_columns:
         if chart_type_indicators == "Line":
             fig.add_trace(
@@ -428,8 +427,12 @@ if show_btc_price and BTC_PRICE_VALUE_COL in df_btc.columns:
                     fig.add_vline(x=cp_date, line_width=2, line_dash="dash", line_color="white")
 
 # Set x-axis range to the full date range from merged data
-min_date = merged_df["DATE"].min().strftime("%Y-%m-%d") if "DATE" in merged_df.columns else merged_df["SNAPSHOT_DATE"].min().strftime("%Y-%m-%d")
-max_date = merged_df["DATE"].max().strftime("%Y-%m-%d") if "DATE" in merged_df.columns else merged_df["SNAPSHOT_DATE"].max().strftime("%Y-%m-%d")
+if "DATE" in merged_df.columns:
+    min_date = merged_df["DATE"].min().strftime("%Y-%m-%d")
+    max_date = merged_df["DATE"].max().strftime("%Y-%m-%d")
+else:
+    min_date = merged_df["SNAPSHOT_DATE"].min().strftime("%Y-%m-%d")
+    max_date = merged_df["SNAPSHOT_DATE"].max().strftime("%Y-%m-%d")
 
 fig.update_xaxes(title_text="Date", gridcolor="#4f5b66", range=[min_date, max_date])
 fig.update_layout(
