@@ -1,5 +1,4 @@
 import streamlit as st
-import snowflake.connector
 import pandas as pd
 import plotly.express as px
 
@@ -14,10 +13,8 @@ query = """
     FROM HODL_Waves
     ORDER BY SNAPSHOT_DATE, AGE_BUCKET
 """
-df = pd.read_sql(query, conn)
+session.sql(query).to_pandas()
 
-# Close connection
-conn.close()
 
 # Convert date column to datetime
 df["SNAPSHOT_DATE"] = pd.to_datetime(df["SNAPSHOT_DATE"])
