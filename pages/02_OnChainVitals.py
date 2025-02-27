@@ -59,17 +59,17 @@ if "colors" not in st.session_state:
 # 4) Table Configurations
 ######################################
 TABLE_DICT = {
-    "ACTIVE_ADDRESSES": {
+    "ACTIVE ADDRESSES": {
         "table_name": "BTC_DATA.DATA.ACTIVE_ADDRESSES",
         "date_col": "DATE", 
         "numeric_cols": ["ACTIVE_ADDRESSES"]
     },
-    "ADDRESSES_PROFIT_LOSS_PERCENT": {
+    "ADDRESSES PROFIT LOSS PERCENT": {
         "table_name": "BTC_DATA.DATA.ADDRESSES_PROFIT_LOSS_PERCENT",
         "date_col": "sale_date", 
         "numeric_cols": ["PERCENT_PROFIT","PERCENT_LOSS"]
     },
-    "BTC_REALIZED_CAP_AND_PRICE": {
+    "REALIZED CAP AND PRICE": {
         "table_name": "BTC_DATA.DATA.BTC_REALIZED_CAP_AND_PRICE",
         "date_col": "DATE",
         "numeric_cols": [
@@ -88,7 +88,7 @@ TABLE_DICT = {
         "date_col": "DAY",
         "numeric_cols": ["INFLOW", "OUTFLOW", "NETFLOW"]
     },
-    "HOLDER_REALIZED_PRICES": {
+    "HOLDER REALIZED PRICES": {
         "table_name": "BTC_DATA.DATA.HOLDER_REALIZED_PRICES",
         "date_col": "DATE",
         "numeric_cols": ["SHORT_TERM_HOLDER_REALIZED_PRICE", "LONG_TERM_HOLDER_REALIZED_PRICE"]
@@ -98,7 +98,7 @@ TABLE_DICT = {
         "date_col": "DATE",
         "numeric_cols": ["MVRV"]
     },
-    "MVRV_WITH_HOLDER_TYPES": {
+    "MVRV WITH HOLDER TYPES": {
         "table_name": "BTC_DATA.DATA.MVRV_WITH_HOLDER_TYPES",
         "date_col": "DATE",
         "numeric_cols": ["OVERALL_MVRV", "STH_MVRV", "LTH_MVRV"]
@@ -118,32 +118,32 @@ TABLE_DICT = {
         "date_col": "spent_date",
         "numeric_cols": ["SOPR"]
     },
-    "SOPR_WITH_HOLDER_TYPES": {
+    "SOPR WITH HOLDER TYPES": {
         "table_name": "BTC_DATA.DATA.SOPR_WITH_HOLDER_TYPES",
         "date_col": "sale_date",
         "numeric_cols": ["OVERALL_SOPR","STH_SOPR","LTH_SOPR"]
     },
-    "STOCK_TO_FLOW_MODEL": {
+    "STOCK TO FLOW MODEL": {
         "table_name": "BTC_DATA.DATA.STOCK_TO_FLOW_MODEL",
-        "date_col": "DAY",
-        "numeric_cols": ["STOCK","FLOW","S2F","FORECASTED_PRICE"]
+        "date_col": "DATE",
+        "numeric_cols": ["STOCK","FLOW","S2F","MODEL_PRICE"]
     },
-    "TX_COUNT": {
+    "TX COUNT": {
         "table_name": "BTC_DATA.DATA.TX_COUNT",
         "date_col": "BLOCK_TIMESTAMP",
         "numeric_cols": ["TX_COUNT"]
     },
-    "TX_VOLUME": {
+    "TX VOLUME": {
         "table_name": "BTC_DATA.DATA.TX_VOLUME",
         "date_col": "DATE",
         "numeric_cols": ["DAILY_TX_VOLUME_BTC"]
     },
-    "UTXO_LIFECYCLE": {
+    "UTXO LIFECYCLE": {
         "table_name": "BTC_DATA.DATA.UTXO_LIFECYCLE",
         "date_col": "CREATED_TIMESTAMP",
         "numeric_cols": ["BTC_VALUE"]
     },
-    "PUELL_MULTIPLE": {
+    "PUELL MULTIPLE": {
         "table_name": "BTC_DATA.DATA.PUELL_MULTIPLE",
         "date_col": "DATE",
         "numeric_cols": [
