@@ -156,8 +156,6 @@ TABLE_DICT = {
     "HODL WAVES": {
         "table_name": "BTC_DATA.DATA.HODL_WAVES",
         "date_col": "SNAPSHOT_DATE",
-        # For HODL WAVES, our table contains three columns: SNAPSHOT_DATE, AGE_BUCKET, and PERCENT_SUPPLY.
-        # We'll use a custom query to pivot the data.
         "custom_query": True
     },
 }
@@ -176,7 +174,6 @@ st.title("Bitcoin On-chain Indicators Dashboard")
 ######################################
 with st.sidebar:
     st.header("Select On-chain Indicator")
-    # Choose one table
     selected_table = st.selectbox(
         "Select a Table (Metric Set)",
         list(TABLE_DICT.keys()),
@@ -184,8 +181,7 @@ with st.sidebar:
     )
     table_info = TABLE_DICT[selected_table]
     if table_info.get("custom_query", False) and selected_table == "HODL WAVES":
-        # For HODL WAVES, we use a custom query so no column selection is needed.
-        selected_cols = []
+        selected_cols = []  # Custom query – no column selection
     else:
         all_numeric_cols = table_info["numeric_cols"]
         selected_cols = st.multiselect(
@@ -197,23 +193,15 @@ with st.sidebar:
 
     st.markdown("---")
     st.header("Chart Options")
-
     default_start_date = datetime.date(2015, 1, 1)
-    selected_start_date = st.date_input(
-        "Start Date",
-        value=default_start_date
-    )
-
+    selected_start_date = st.date_input("Start Date", value=default_start_date)
     scale_option_indicator = st.radio("Indicator Axis Scale", ["Linear", "Log"], index=0)
     chart_type_indicators = st.radio("Indicator Chart Type", ["Line", "Bars"], index=0)
-
     show_ema = st.checkbox("Add EMA for Indicators", value=False)
     if show_ema:
         ema_period = st.number_input("EMA Period (days)", min_value=2, max_value=200, value=20)
-
     st.markdown("---")
     st.header("BTC Price Options")
-
     show_btc_price = st.checkbox("Show BTC Price?", value=True)
     same_axis_checkbox = st.checkbox("Plot BTC Price on same Y-axis?", value=False)
     chart_type_price = st.radio("BTC Price Chart Type", ["Line", "Bars"], index=0)
@@ -229,7 +217,6 @@ if (("custom_query" not in table_info) or (not table_info.get("custom_query", Fa
     if not selected_cols:
         st.warning("Please select at least one indicator column.")
         st.stop()
-
     for i, col in enumerate(selected_cols):
         if col not in st.session_state["assigned_colors"]:
             color_assigned = st.session_state["color_palette"][i % len(st.session_state["color_palette"])]
@@ -250,8 +237,8 @@ if show_btc_price:
 
 # Build query based on whether a custom query is needed
 if table_info.get("custom_query", False) and selected_table == "HODL WAVES":
-    # For HODL WAVES, pivot the tall table into a wide format.
-    # We cannot alias pivot expressions directly in Snowflake; instead, we wrap the pivot in a CTE and then alias in an outer SELECT.
+    # Pivot the tall HODL_WAVES table. Since aliasing directly in the IN clause isn’t allowed,
+    # we wrap the PIVOT in a CTE and then rename columns in the outer SELECT.
     query = f"""
         WITH pivoted AS (
             SELECT *
@@ -261,23 +248,23 @@ if table_info.get("custom_query", False) and selected_table == "HODL WAVES":
                 WHERE CAST(SNAPSHOT_DATE AS DATE) >= '{selected_start_date}'
             )
             PIVOT (
-                MAX(PERCENT_SUPPLY) FOR AGE_BUCKET IN ('<1d','1d-1w','1w-1m','1m-3m','3m-6m','6m-12m','1y-2y','2y-3y','3y-5y','5y-7y','7y-10y','>=10y')
+                MAX(PERCENT_SUPPLY) FOR AGE_BUCKET IN ('<1d', '1d-1w', '1w-1m', '1m-3m', '3m-6m', '6m-12m', '1y-2y', '2y-3y', '3y-5y', '5y-7y', '7y-10y', '>=10y')
             )
         )
         SELECT 
             SNAPSHOT_DATE,
-            "<1d" AS LT1D,
-            "1d-1w" AS D1_1W,
-            "1w-1m" AS W1_1M,
-            "1m-3m" AS M1_3M,
-            "3m-6m" AS M3_6M,
-            "6m-12m" AS M6_12M,
-            "1y-2y" AS Y1_2Y,
-            "2y-3y" AS Y2_3Y,
-            "3y-5y" AS Y3_5Y,
-            "5y-7y" AS Y5_7Y,
-            "7y-10y" AS Y7_10Y,
-            ">=10y" AS GTE10Y
+            pivoted."<1d" AS LT1D,
+            pivoted."1d-1w" AS D1_1W,
+            pivoted."1w-1m" AS W1_1M,
+            pivoted."1m-3m" AS M1_3M,
+            pivoted."3m-6m" AS M3_6M,
+            pivoted."6m-12m" AS M6_12M,
+            pivoted."1y-2y" AS Y1_2Y,
+            pivoted."2y-3y" AS Y2_3Y,
+            pivoted."3y-5y" AS Y3_5Y,
+            pivoted."5y-7y" AS Y5_7Y,
+            pivoted."7y-10y" AS Y7_10Y,
+            pivoted.">=10y" AS GTE10Y
         FROM pivoted
         ORDER BY SNAPSHOT_DATE
     """
@@ -293,7 +280,11 @@ else:
         ORDER BY DATE
     """
 
-df_indicators = session.sql(query).to_pandas()
+try:
+    df_indicators = session.sql(query).to_pandas()
+except Exception as e:
+    st.error(f"Error executing query: {e}")
+    st.stop()
 
 df_btc = pd.DataFrame()
 if show_btc_price:
@@ -306,9 +297,13 @@ if show_btc_price:
           AND CAST({BTC_PRICE_DATE_COL} AS DATE) >= '{selected_start_date}'
         ORDER BY DATE
     """
-    df_btc = session.sql(btc_query).to_pandas()
+    try:
+        df_btc = session.sql(btc_query).to_pandas()
+    except Exception as e:
+        st.error(f"Error executing BTC Price query: {e}")
+        st.stop()
 
-# Instead of an inner join, perform an outer merge to cover the full date range.
+# Merge dataframes on date (outer join)
 if show_btc_price and not df_btc.empty:
     merged_df = pd.merge(df_btc, df_indicators, on="DATE", how="outer")
     merged_df.sort_values("DATE", inplace=True)
@@ -319,8 +314,8 @@ if merged_df.empty:
     st.warning("No data returned. Check your date range or table selection.")
     st.stop()
 
-# Calculate EMA if selected
-if show_ema and not table_info.get("custom_query", False):
+# Calculate EMA if selected (only for non-custom queries)
+if show_ema and (not table_info.get("custom_query", False)):
     for col in selected_cols:
         merged_df[f"EMA_{col}"] = merged_df[col].ewm(span=ema_period).mean()
 
@@ -365,7 +360,7 @@ if not table_info.get("custom_query", False):
                     secondary_y=False
                 )
 else:
-    # For HODL WAVES, use SNAPSHOT_DATE as the x-axis and plot each pivoted age bucket.
+    # For HODL WAVES, use SNAPSHOT_DATE as x-axis
     pivot_columns = [col for col in merged_df.columns if col.upper() not in ["SNAPSHOT_DATE", "DATE"]]
     for col in pivot_columns:
         if chart_type_indicators == "Line":
@@ -414,8 +409,6 @@ if show_btc_price and BTC_PRICE_VALUE_COL in df_btc.columns:
             ),
             secondary_y=price_secondary
         )
-
-    # Detect change points using the PELT algorithm if enabled
     if detect_cpd:
         btc_series = merged_df[BTC_PRICE_VALUE_COL].dropna()
         if not btc_series.empty:
@@ -426,7 +419,7 @@ if show_btc_price and BTC_PRICE_VALUE_COL in df_btc.columns:
                     cp_date = merged_df["DATE"].iloc[cp]
                     fig.add_vline(x=cp_date, line_width=2, line_dash="dash", line_color="white")
 
-# Set x-axis range to the full date range from merged data
+# Set x-axis range
 if "DATE" in merged_df.columns:
     min_date = merged_df["DATE"].min().strftime("%Y-%m-%d")
     max_date = merged_df["DATE"].max().strftime("%Y-%m-%d")
