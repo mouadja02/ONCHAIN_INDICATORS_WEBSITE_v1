@@ -240,41 +240,36 @@ date_col = table_info["date_col"]
 cols_for_query = ", ".join(selected_cols)
 query = f"""
     SELECT
-        CAST({date_col} AS DATE) AS IND_DATE,
+        CAST({date_col} AS DATE) AS DATE,
         {cols_for_query}
     FROM {table_info['table_name']}
     WHERE CAST({date_col} AS DATE) >= '{selected_start_date}'
-    ORDER BY IND_DATE
+    ORDER BY DATE
 """
 df_indicators = session.sql(query).to_pandas()
-df_indicators.rename(columns={"IND_DATE": "DATE"}, inplace=True)
 
 df_btc = pd.DataFrame()
 if show_btc_price:
     btc_query = f"""
         SELECT
-            CAST({BTC_PRICE_DATE_COL} AS DATE) AS PRICE_DATE,
+            CAST({BTC_PRICE_DATE_COL} AS DATE) AS DATE,
             {BTC_PRICE_VALUE_COL}
         FROM {BTC_PRICE_TABLE}
         WHERE {BTC_PRICE_VALUE_COL} IS NOT NULL
           AND CAST({BTC_PRICE_DATE_COL} AS DATE) >= '{selected_start_date}'
-        ORDER BY PRICE_DATE
+        ORDER BY DATE
     """
     df_btc = session.sql(btc_query).to_pandas()
-    df_btc.rename(columns={"PRICE_DATE": "DATE"}, inplace=True)
 
-if df_indicators.empty and df_btc.empty:
-    st.warning("No data returned. Check your date range or table selection.")
-    st.stop()
-
-# Merge if BTC Price is shown
+# Instead of an inner join, we perform an outer merge to cover full date range.
 if show_btc_price and not df_btc.empty:
-    merged_df = pd.merge(df_btc, df_indicators, on="DATE", how="inner")
+    merged_df = pd.merge(df_btc, df_indicators, on="DATE", how="outer")
+    merged_df.sort_values("DATE", inplace=True)
 else:
     merged_df = df_indicators
 
 if merged_df.empty:
-    st.warning("No overlapping data. Check your date range or table selection.")
+    st.warning("No data returned. Check your date range or table selection.")
     st.stop()
 
 # Calculate EMA if selected
@@ -358,16 +353,19 @@ if show_btc_price and "BTC_PRICE_USD" in df_btc.columns:
                     cp_date = merged_df["DATE"].iloc[cp]
                     fig.add_vline(x=cp_date, line_width=2, line_dash="dash", line_color="white")
 
-fig_title = f"{selected_table} vs BTC Price" if show_btc_price else f"{selected_table}"
+# Set x-axis range to the full date range from merged data
+min_date = merged_df["DATE"].min().strftime("%Y-%m-%d")
+max_date = merged_df["DATE"].max().strftime("%Y-%m-%d")
+
+fig.update_xaxes(title_text="Date", gridcolor="#4f5b66", range=[min_date, max_date])
 fig.update_layout(
     paper_bgcolor="#000000",
     plot_bgcolor="#000000",
-    title=fig_title,
+    title=f"{selected_table} vs BTC Price" if show_btc_price else f"{selected_table}",
     hovermode="x unified",
     font=dict(color="#f0f2f6"),
     legend=dict(x=0, y=1.05, orientation="h", bgcolor="rgba(0,0,0,0)")
 )
-fig.update_xaxes(title_text="Date", gridcolor="#4f5b66")
 fig.update_yaxes(
     title_text="Indicator Value",
     type="log" if scale_option_indicator == "Log" else "linear",
