@@ -7,15 +7,6 @@ import plotly.express as px
 st.set_page_config(page_title="Bitcoin HODL Waves", layout="wide")
 st.title("Bitcoin HODL Waves Visualization")
 
-# Snowflake Connection
-conn = snowflake.connector.connect(
-    user=st.secrets["SNOWFLAKE_USER"],
-    password=st.secrets["SNOWFLAKE_PASSWORD"],
-    account=st.secrets["SNOWFLAKE_ACCOUNT"],
-    warehouse=st.secrets["SNOWFLAKE_WAREHOUSE"],
-    database=st.secrets["SNOWFLAKE_DATABASE"],
-    schema=st.secrets["SNOWFLAKE_SCHEMA"]
-)
 
 # Query Data
 query = """
