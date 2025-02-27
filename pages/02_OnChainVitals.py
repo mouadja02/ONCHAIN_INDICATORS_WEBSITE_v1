@@ -272,13 +272,14 @@ if merged_df.empty:
     st.warning("No overlapping data. Check your date range or table selection.")
     st.stop()
 
-# Calculate EMA
+# Calculate EMA if selected
 if show_ema:
     for col in selected_cols:
         merged_df[f"EMA_{col}"] = merged_df[col].ewm(span=ema_period).mean()
 
 # Build Plotly figure
 fig = make_subplots(specs=[[{"secondary_y": True}]])
+
 # Plot indicators on primary axis
 for col in selected_cols:
     if chart_type_indicators == "Line":
@@ -316,7 +317,7 @@ for col in selected_cols:
                 secondary_y=False
             )
 
-# Plot BTC Price
+# Plot BTC Price on secondary (or same) axis
 if show_btc_price and "BTC_PRICE_USD" in df_btc.columns:
     price_secondary = not same_axis_checkbox
     if chart_type_price == "Line":
@@ -341,7 +342,7 @@ if show_btc_price and "BTC_PRICE_USD" in df_btc.columns:
             secondary_y=price_secondary
         )
 
-    # CPD if enabled
+    # Detect change points using the PELT algorithm if enabled
     if detect_cpd:
         btc_series = merged_df[BTC_PRICE_VALUE_COL].dropna()
         if not btc_series.empty:
@@ -378,7 +379,7 @@ fig.update_yaxes(
 config = {
     'editable': True,
     'modeBarButtonsToAdd': [
-        'drawline','drawopenpath','drawclosedpath','drawcircle','drawrect','eraseshape'
+        'drawline', 'drawopenpath', 'drawclosedpath', 'drawcircle', 'drawrect', 'eraseshape'
     ]
 }
 st.plotly_chart(fig, use_container_width=True, config=config)
