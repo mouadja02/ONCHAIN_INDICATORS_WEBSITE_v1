@@ -13,7 +13,7 @@ session = cx.session()
 query = """
     SELECT SNAPSHOT_DATE, AGE_BUCKET, PERCENT_SUPPLY
     FROM HODL_Waves
-    ORDER BY SNAPSHOT_DATE, AGE_BUCKET
+    ORDER BY SNAPSHOT_DATE ASC
 """
 df = session.sql(query).to_pandas()
 
@@ -55,5 +55,5 @@ fig.update_layout(
 st.plotly_chart(fig, use_container_width=True)
 
 # Display Data Table
-st.subheader("HODL Waves Data")
-st.dataframe(df_filtered)
+#st.subheader("HODL Waves Data")
+#st.dataframe(df_filtered)
