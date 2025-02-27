@@ -2,10 +2,10 @@ import streamlit as st
 import pandas as pd
 import plotly.express as px
 
-
 # Streamlit UI setup
 st.set_page_config(page_title="Bitcoin HODL Waves", layout="wide")
 st.title("Bitcoin HODL Waves Visualization")
+
 cx = st.connection("snowflake")
 session = cx.session()
 
@@ -17,9 +17,12 @@ query = """
 """
 df = session.sql(query).to_pandas()
 
-
 # Convert date column to datetime
 df["SNAPSHOT_DATE"] = pd.to_datetime(df["SNAPSHOT_DATE"])
+
+# Filter out future dates
+today = pd.to_datetime("today").normalize()  # Get today's date without time
+df = df[df["SNAPSHOT_DATE"] < today]
 
 # Sidebar Filters
 st.sidebar.header("Filter Data")
@@ -36,7 +39,7 @@ fig = px.area(
     x="SNAPSHOT_DATE",
     y="PERCENT_SUPPLY",
     color="AGE_BUCKET",
-    title="Bitcoin HODL Waves Over Time",
+    title="Bitcoin HODL Waves Over Time (Before Today)",
     labels={"SNAPSHOT_DATE": "Date", "PERCENT_SUPPLY": "Supply Percentage (%)"},
     color_discrete_sequence=px.colors.qualitative.Set1
 )
