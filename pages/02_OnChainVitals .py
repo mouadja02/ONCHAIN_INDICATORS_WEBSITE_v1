@@ -213,7 +213,6 @@ if not selected_cols:
     st.warning("Please select at least one indicator column.")
     st.stop()
 
-# Assign colors
 for i, col in enumerate(selected_cols):
     if col not in st.session_state["assigned_colors"]:
         color_assigned = st.session_state["color_palette"][i % len(st.session_state["color_palette"])]
@@ -232,7 +231,6 @@ if show_btc_price:
     st.session_state["assigned_colors"]["BTC_PRICE"] = picked_btc_color
     st.session_state["colors"]["BTC_PRICE"] = picked_btc_color
 
-# Query the chosen table
 date_col = table_info["date_col"]
 cols_for_query = ", ".join(selected_cols)
 query = f"""
@@ -246,7 +244,6 @@ query = f"""
 df_indicators = session.sql(query).to_pandas()
 df_indicators.rename(columns={"IND_DATE": "DATE"}, inplace=True)
 
-# Query BTC Price if requested
 df_btc = pd.DataFrame()
 if show_btc_price:
     btc_query = f"""
@@ -321,9 +318,6 @@ for col in selected_cols:
 
 # Plot BTC Price
 if show_btc_price and "BTC_PRICE_USD" in df_btc.columns:
-    # Actually after rename, the col is BTC_PRICE_USD in df_btc. But we merged with the same name?
-    # We can just use merged_df[BTC_PRICE_VALUE_COL].
-    # We'll assume the user wants to call it "BTC_PRICE" in the final chart name.
     price_secondary = not same_axis_checkbox
     if chart_type_price == "Line":
         fig.add_trace(
