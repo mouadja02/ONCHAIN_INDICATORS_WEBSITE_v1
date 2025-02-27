@@ -155,11 +155,12 @@ TABLE_DICT = {
     },
     "HODL WAVES": {
         "table_name": "BTC_DATA.DATA.HODL_WAVES",
+        # Use SNAPSHOT_DATE as the date column
         "date_col": "SNAPSHOT_DATE",
-        "numeric_cols": [
-            "LT1D", "D1_1W", "W1_1M", "M1_3M", "M3_6M", 
-            "M6_12M", "Y1_2Y", "Y2_3Y", "Y3_5Y", "Y5_7Y", "Y7_10Y", "GTE10Y"
-        ]
+        # We only have one numeric column, but we'll pivot the data using AGE_BUCKET values.
+        "numeric_cols": ["PERCENT_SUPPLY"],
+        # Provide a flag so we know to use a custom pivot query.
+        "custom_query": True
     },
 }
 
@@ -184,13 +185,17 @@ with st.sidebar:
         help="Pick which table (indicator set) to visualize."
     )
     table_info = TABLE_DICT[selected_table]
-    all_numeric_cols = table_info["numeric_cols"]
-    selected_cols = st.multiselect(
-        "Select Indicator(s):",
-        all_numeric_cols,
-        default=all_numeric_cols,
-        help="Pick one or more numeric columns to plot."
-    )
+    if "custom_query" in table_info and table_info["custom_query"]:
+        # For HODL WAVES we use a custom pivot query.
+        selected_cols = []  # not used in custom query
+    else:
+        all_numeric_cols = table_info["numeric_cols"]
+        selected_cols = st.multiselect(
+            "Select Indicator(s):",
+            all_numeric_cols,
+            default=all_numeric_cols,
+            help="Pick one or more numeric columns to plot."
+        )
 
     st.markdown("---")
     st.header("Chart Options")
@@ -222,18 +227,19 @@ with st.sidebar:
 ######################################
 # 7) MAIN CHART
 ######################################
-if not selected_cols:
-    st.warning("Please select at least one indicator column.")
-    st.stop()
+if ("custom_query" not in table_info) or (not table_info.get("custom_query", False)):
+    if not selected_cols:
+        st.warning("Please select at least one indicator column.")
+        st.stop()
 
-for i, col in enumerate(selected_cols):
-    if col not in st.session_state["assigned_colors"]:
-        color_assigned = st.session_state["color_palette"][i % len(st.session_state["color_palette"])]
-        st.session_state["assigned_colors"][col] = color_assigned
-    default_color = st.session_state["assigned_colors"][col]
-    picked_color = st.color_picker(f"Color for {col}", default_color)
-    st.session_state["assigned_colors"][col] = picked_color
-    st.session_state["colors"][col] = picked_color
+    for i, col in enumerate(selected_cols):
+        if col not in st.session_state["assigned_colors"]:
+            color_assigned = st.session_state["color_palette"][i % len(st.session_state["color_palette"])]
+            st.session_state["assigned_colors"][col] = color_assigned
+        default_color = st.session_state["assigned_colors"][col]
+        picked_color = st.color_picker(f"Color for {col}", default_color)
+        st.session_state["assigned_colors"][col] = picked_color
+        st.session_state["colors"][col] = picked_color
 
 if show_btc_price:
     if "BTC_PRICE" not in st.session_state["assigned_colors"]:
@@ -244,16 +250,49 @@ if show_btc_price:
     st.session_state["assigned_colors"]["BTC_PRICE"] = picked_btc_color
     st.session_state["colors"]["BTC_PRICE"] = picked_btc_color
 
-date_col = table_info["date_col"]
-cols_for_query = ", ".join(selected_cols)
-query = f"""
-    SELECT
-        CAST({date_col} AS DATE) AS DATE,
-        {cols_for_query}
-    FROM {table_info['table_name']}
-    WHERE CAST({date_col} AS DATE) >= '{selected_start_date}'
-    ORDER BY DATE
-"""
+# Build query based on whether custom query is needed
+if table_info.get("custom_query", False) and selected_table == "HODL WAVES":
+    # For HODL WAVES, pivot the tall table into wide format.
+    query = f"""
+        SELECT *
+        FROM (
+            SELECT 
+                SNAPSHOT_DATE, 
+                AGE_BUCKET, 
+                PERCENT_SUPPLY
+            FROM {table_info['table_name']}
+            WHERE CAST(SNAPSHOT_DATE AS DATE) >= '{selected_start_date}'
+        )
+        PIVOT (
+            MAX(PERCENT_SUPPLY) FOR AGE_BUCKET IN (
+                '<1d' AS LT1D, 
+                '1d-1w' AS D1_1W, 
+                '1w-1m' AS W1_1M, 
+                '1m-3m' AS M1_3M, 
+                '3m-6m' AS M3_6M, 
+                '6m-12m' AS M6_12M, 
+                '1y-2y' AS Y1_2Y, 
+                '2y-3y' AS Y2_3Y, 
+                '3y-5y' AS Y3_5Y, 
+                '5y-7y' AS Y5_7Y, 
+                '7y-10y' AS Y7_10Y, 
+                '>=10y' AS GTE10Y
+            )
+        )
+        ORDER BY SNAPSHOT_DATE
+    """
+else:
+    date_col = table_info["date_col"]
+    cols_for_query = ", ".join(selected_cols)
+    query = f"""
+        SELECT
+            CAST({date_col} AS DATE) AS DATE,
+            {cols_for_query}
+        FROM {table_info['table_name']}
+        WHERE CAST({date_col} AS DATE) >= '{selected_start_date}'
+        ORDER BY DATE
+    """
+
 df_indicators = session.sql(query).to_pandas()
 
 df_btc = pd.DataFrame()
@@ -289,38 +328,65 @@ if show_ema:
 fig = make_subplots(specs=[[{"secondary_y": True}]])
 
 # Plot indicators on primary axis
-for col in selected_cols:
-    if chart_type_indicators == "Line":
-        fig.add_trace(
-            go.Scatter(
-                x=merged_df["DATE"],
-                y=merged_df[col],
-                mode="lines",
-                name=col,
-                line=dict(color=st.session_state["colors"][col])
-            ),
-            secondary_y=False
-        )
-    else:
-        fig.add_trace(
-            go.Bar(
-                x=merged_df["DATE"],
-                y=merged_df[col],
-                name=col,
-                marker_color=st.session_state["colors"][col]
-            ),
-            secondary_y=False
-        )
-    if show_ema:
-        ema_col = f"EMA_{col}"
-        if ema_col in merged_df.columns:
+if not table_info.get("custom_query", False):
+    for col in selected_cols:
+        if chart_type_indicators == "Line":
             fig.add_trace(
                 go.Scatter(
                     x=merged_df["DATE"],
-                    y=merged_df[ema_col],
+                    y=merged_df[col],
                     mode="lines",
-                    name=f"EMA({ema_period}) - {col}",
-                    line=dict(color=st.session_state["colors"][col], dash="dot")
+                    name=col,
+                    line=dict(color=st.session_state["colors"][col])
+                ),
+                secondary_y=False
+            )
+        else:
+            fig.add_trace(
+                go.Bar(
+                    x=merged_df["DATE"],
+                    y=merged_df[col],
+                    name=col,
+                    marker_color=st.session_state["colors"][col]
+                ),
+                secondary_y=False
+            )
+        if show_ema:
+            ema_col = f"EMA_{col}"
+            if ema_col in merged_df.columns:
+                fig.add_trace(
+                    go.Scatter(
+                        x=merged_df["DATE"],
+                        y=merged_df[ema_col],
+                        mode="lines",
+                        name=f"EMA({ema_period}) - {col}",
+                        line=dict(color=st.session_state["colors"][col], dash="dot")
+                    ),
+                    secondary_y=False
+                )
+else:
+    # For HODL WAVES, plot each age bucket as a separate trace.
+    # We'll consider the pivoted columns (if available) and plot each.
+    pivot_columns = [col for col in merged_df.columns if col not in ["SNAPSHOT_DATE", "DATE"]]
+    for col in pivot_columns:
+        if chart_type_indicators == "Line":
+            fig.add_trace(
+                go.Scatter(
+                    x=merged_df["SNAPSHOT_DATE"],
+                    y=merged_df[col],
+                    mode="lines",
+                    name=col,
+                    line=dict(color=st.session_state["colors"].get(col, "#FFFFFF"))
+                ),
+                secondary_y=False
+            )
+        else:
+            fig.add_trace(
+                go.Bar(
+                    x=merged_df["SNAPSHOT_DATE"],
+                    y=merged_df[col],
+                    name=col,
+                    marker_color=st.session_state["colors"].get(col, "#FFFFFF")
                 ),
                 secondary_y=False
             )
@@ -362,8 +428,8 @@ if show_btc_price and BTC_PRICE_VALUE_COL in df_btc.columns:
                     fig.add_vline(x=cp_date, line_width=2, line_dash="dash", line_color="white")
 
 # Set x-axis range to the full date range from merged data
-min_date = merged_df["DATE"].min().strftime("%Y-%m-%d")
-max_date = merged_df["DATE"].max().strftime("%Y-%m-%d")
+min_date = merged_df["DATE"].min().strftime("%Y-%m-%d") if "DATE" in merged_df.columns else merged_df["SNAPSHOT_DATE"].min().strftime("%Y-%m-%d")
+max_date = merged_df["DATE"].max().strftime("%Y-%m-%d") if "DATE" in merged_df.columns else merged_df["SNAPSHOT_DATE"].max().strftime("%Y-%m-%d")
 
 fig.update_xaxes(title_text="Date", gridcolor="#4f5b66", range=[min_date, max_date])
 fig.update_layout(
