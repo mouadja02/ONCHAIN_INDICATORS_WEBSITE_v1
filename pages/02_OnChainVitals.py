@@ -123,6 +123,11 @@ TABLE_DICT = {
         "date_col": "sale_date",
         "numeric_cols": ["OVERALL_SOPR","STH_SOPR","LTH_SOPR"]
     },
+    "STOCK_TO_FLOW_MODEL": {
+        "table_name": "BTC_DATA.DATA.STOCK_TO_FLOW_MODEL",
+        "date_col": "DAY",
+        "numeric_cols": ["STOCK","FLOW","S2F","FORECASTED_PRICE"]
+    },
     "TX_COUNT": {
         "table_name": "BTC_DATA.DATA.TX_COUNT",
         "date_col": "BLOCK_TIMESTAMP",
