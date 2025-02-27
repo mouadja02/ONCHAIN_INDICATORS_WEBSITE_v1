@@ -1,4 +1,4 @@
-# onchain_indicators.py
+# 02_OnChainVitals.py
 
 import streamlit as st
 import pandas as pd
