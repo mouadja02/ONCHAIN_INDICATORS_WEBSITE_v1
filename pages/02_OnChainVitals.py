@@ -1,5 +1,3 @@
-# 02_OnChainVitals.py
-
 import streamlit as st
 import pandas as pd
 import plotly.graph_objects as go
@@ -49,7 +47,6 @@ COLOR_PALETTE = [
 if "color_palette" not in st.session_state:
     st.session_state["color_palette"] = COLOR_PALETTE.copy()
     random.shuffle(st.session_state["color_palette"])
-
 if "assigned_colors" not in st.session_state:
     st.session_state["assigned_colors"] = {}
 if "colors" not in st.session_state:
@@ -67,7 +64,7 @@ TABLE_DICT = {
     "ADDRESSES PROFIT LOSS PERCENT": {
         "table_name": "BTC_DATA.DATA.ADDRESSES_PROFIT_LOSS_PERCENT",
         "date_col": "sale_date", 
-        "numeric_cols": ["PERCENT_PROFIT","PERCENT_LOSS"]
+        "numeric_cols": ["PERCENT_PROFIT", "PERCENT_LOSS"]
     },
     "REALIZED CAP AND PRICE": {
         "table_name": "BTC_DATA.DATA.BTC_REALIZED_CAP_AND_PRICE",
@@ -121,12 +118,12 @@ TABLE_DICT = {
     "SOPR WITH HOLDER TYPES": {
         "table_name": "BTC_DATA.DATA.SOPR_WITH_HOLDER_TYPES",
         "date_col": "sale_date",
-        "numeric_cols": ["OVERALL_SOPR","STH_SOPR","LTH_SOPR"]
+        "numeric_cols": ["OVERALL_SOPR", "STH_SOPR", "LTH_SOPR"]
     },
     "STOCK TO FLOW MODEL": {
         "table_name": "BTC_DATA.DATA.STOCK_TO_FLOW_MODEL",
         "date_col": "DATE",
-        "numeric_cols": ["STOCK","FLOW","STOCK_TO_FLOW","MODEL_PRICE"]
+        "numeric_cols": ["STOCK", "FLOW", "STOCK_TO_FLOW", "MODEL_PRICE"]
     },
     "TX COUNT": {
         "table_name": "BTC_DATA.DATA.TX_COUNT",
@@ -291,35 +288,19 @@ with plot_container:
 
     # Calculate EMA if requested
     if show_ema:
+        # For each indicator, compute EMA; also compute EMA for BTC Price if applicable.
         for col in selected_cols:
             merged_df[f"EMA_{col}"] = merged_df[col].ewm(span=ema_period).mean()
+        if show_btc_price and not df_btc.empty:
+            merged_df["EMA_BTC_PRICE"] = merged_df[BTC_PRICE_VALUE_COL].ewm(span=ema_period).mean()
 
     # Build Plotly Figure
     fig = make_subplots(specs=[[{"secondary_y": True}]])
-    # Plot each indicator on primary axis
+    
+    # Plot on-chain indicators
     for col in selected_cols:
-        if chart_type_indicators == "Line":
-            fig.add_trace(
-                go.Scatter(
-                    x=merged_df["DATE"],
-                    y=merged_df[col],
-                    mode="lines",
-                    name=col,
-                    line=dict(color=st.session_state["colors"][col])
-                ),
-                secondary_y=False
-            )
-        else:
-            fig.add_trace(
-                go.Bar(
-                    x=merged_df["DATE"],
-                    y=merged_df[col],
-                    name=col,
-                    marker_color=st.session_state["colors"][col]
-                ),
-                secondary_y=False
-            )
         if show_ema:
+            # When EMA is activated, plot only the EMA curve with full (solid) line.
             ema_col = f"EMA_{col}"
             if ema_col in merged_df.columns:
                 fig.add_trace(
@@ -328,7 +309,29 @@ with plot_container:
                         y=merged_df[ema_col],
                         mode="lines",
                         name=f"EMA({ema_period}) - {col}",
-                        line=dict(color=st.session_state["colors"][col], dash="dot")
+                        line=dict(color=st.session_state["colors"][col])
+                    ),
+                    secondary_y=False
+                )
+        else:
+            if chart_type_indicators == "Line":
+                fig.add_trace(
+                    go.Scatter(
+                        x=merged_df["DATE"],
+                        y=merged_df[col],
+                        mode="lines",
+                        name=col,
+                        line=dict(color=st.session_state["colors"][col])
+                    ),
+                    secondary_y=False
+                )
+            else:
+                fig.add_trace(
+                    go.Bar(
+                        x=merged_df["DATE"],
+                        y=merged_df[col],
+                        name=col,
+                        marker_color=st.session_state["colors"][col]
                     ),
                     secondary_y=False
                 )
@@ -336,37 +339,51 @@ with plot_container:
     # Plot BTC Price on secondary (or same) axis
     if show_btc_price and not df_btc.empty:
         price_secondary = not same_axis_checkbox
-        if chart_type_price == "Line":
+        if show_ema:
+            # Plot EMA of BTC Price instead of the raw curve
             fig.add_trace(
                 go.Scatter(
                     x=merged_df["DATE"],
-                    y=merged_df[BTC_PRICE_VALUE_COL],
+                    y=merged_df["EMA_BTC_PRICE"],
                     mode="lines",
-                    name="BTC Price (USD)",
+                    name=f"EMA({ema_period}) - BTC Price",
                     line=dict(color=st.session_state["colors"]["BTC_PRICE"])
                 ),
                 secondary_y=price_secondary
             )
         else:
-            fig.add_trace(
-                go.Bar(
-                    x=merged_df["DATE"],
-                    y=merged_df[BTC_PRICE_VALUE_COL],
-                    name="BTC Price (USD)",
-                    marker_color=st.session_state["colors"]["BTC_PRICE"]
-                ),
-                secondary_y=price_secondary
-            )
-        # CPD: detect change points on BTC Price
-        if detect_cpd:
-            btc_series = merged_df[BTC_PRICE_VALUE_COL].dropna()
-            if not btc_series.empty:
-                algo = rpt.Pelt(model="rbf").fit(btc_series.values)
-                change_points = algo.predict(pen=pen_value)
-                for cp in change_points:
-                    if cp < len(merged_df):
-                        cp_date = merged_df["DATE"].iloc[cp]
-                        fig.add_vline(x=cp_date, line_width=2, line_dash="dash", line_color="white")
+            if chart_type_price == "Line":
+                fig.add_trace(
+                    go.Scatter(
+                        x=merged_df["DATE"],
+                        y=merged_df[BTC_PRICE_VALUE_COL],
+                        mode="lines",
+                        name="BTC Price (USD)",
+                        line=dict(color=st.session_state["colors"]["BTC_PRICE"])
+                    ),
+                    secondary_y=price_secondary
+                )
+            else:
+                fig.add_trace(
+                    go.Bar(
+                        x=merged_df["DATE"],
+                        y=merged_df[BTC_PRICE_VALUE_COL],
+                        name="BTC Price (USD)",
+                        marker_color=st.session_state["colors"]["BTC_PRICE"]
+                    ),
+                    secondary_y=price_secondary
+                )
+    
+            # CPD: detect change points on BTC Price if enabled
+            if detect_cpd:
+                btc_series = merged_df[BTC_PRICE_VALUE_COL].dropna()
+                if not btc_series.empty:
+                    algo = rpt.Pelt(model="rbf").fit(btc_series.values)
+                    change_points = algo.predict(pen=pen_value)
+                    for cp in change_points:
+                        if cp < len(merged_df):
+                            cp_date = merged_df["DATE"].iloc[cp]
+                            fig.add_vline(x=cp_date, line_width=2, line_dash="dash", line_color="white")
 
     # Set x-axis range based on start and (if activated) end date
     x_range = [selected_start_date.strftime("%Y-%m-%d")]
@@ -400,7 +417,7 @@ with plot_container:
     config = {
         'editable': True,
         'modeBarButtonsToAdd': [
-            'drawline','drawopenpath','drawclosedpath','drawcircle','drawrect','eraseshape'
+            'drawline', 'drawopenpath', 'drawclosedpath', 'drawcircle', 'drawrect', 'eraseshape'
         ]
     }
     st.plotly_chart(fig, use_container_width=True, config=config)
