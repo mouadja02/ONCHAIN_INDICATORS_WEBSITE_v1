@@ -204,6 +204,82 @@ st.markdown("""
 🔴 **Red (🔽 Decrease, > Threshold for unchanged state)**
 """, unsafe_allow_html=True)
 
+######################################
+# 9) BTC Candlestick Chart with Dynamic Span
+######################################
+st.header("BTC Candlestick Chart")
+
+# Sidebar selection for the candle chart span
+candle_span = st.selectbox("Select Candle Chart Span", ["Daily", "Weekly", "Monthly"], index=0)
+
+# Map the chosen span to the corresponding Snowflake date_trunc interval
+if candle_span == "Daily":
+    span_interval = "day"
+elif candle_span == "Weekly":
+    span_interval = "week"
+elif candle_span == "Monthly":
+    span_interval = "month"
+
+# Build the query to aggregate open, high, low, close for each period
+candle_query = f"""
+WITH cte AS (
+    SELECT 
+        DATE_TRUNC('{span_interval}', {BTC_PRICE_DATE_COL}) AS period,
+        {BTC_PRICE_DATE_COL} AS date,
+        {BTC_PRICE_VALUE_COL} AS price,
+        ROW_NUMBER() OVER (
+            PARTITION BY DATE_TRUNC('{span_interval}', {BTC_PRICE_DATE_COL})
+            ORDER BY {BTC_PRICE_DATE_COL} ASC
+        ) AS rn_asc,
+        ROW_NUMBER() OVER (
+            PARTITION BY DATE_TRUNC('{span_interval}', {BTC_PRICE_DATE_COL})
+            ORDER BY {BTC_PRICE_DATE_COL} DESC
+        ) AS rn_desc
+    FROM {BTC_PRICE_TABLE}
+    WHERE {BTC_PRICE_DATE_COL} >= '{selected_start_date}'
+"""
+
+if selected_end_date:
+    candle_query += f" AND {BTC_PRICE_DATE_COL} <= '{selected_end_date}'"
+
+candle_query += f"""
+)
+SELECT
+    period,
+    MAX(CASE WHEN rn_asc = 1 THEN price END) AS open,
+    MAX(price) AS high,
+    MIN(price) AS low,
+    MAX(CASE WHEN rn_desc = 1 THEN price END) AS close
+FROM cte
+GROUP BY period
+ORDER BY period
+"""
+
+# Execute the query and convert the result to a pandas DataFrame
+df_candle = session.sql(candle_query).to_pandas()
+
+# Create and display the candlestick chart
+fig_candle = go.Figure(data=[go.Candlestick(
+    x=df_candle["PERIOD"],
+    open=df_candle["OPEN"],
+    high=df_candle["HIGH"],
+    low=df_candle["LOW"],
+    close=df_candle["CLOSE"],
+    increasing_line_color='green',
+    decreasing_line_color='red'
+)])
+
+fig_candle.update_layout(
+    title=f"BTC Candlestick Chart ({candle_span} Span)",
+    xaxis_title="Date",
+    yaxis_title="BTC Price (USD)",
+    paper_bgcolor="#000000",
+    plot_bgcolor="#000000",
+    font=dict(color="#f0f2f6"),
+    xaxis=dict(rangeslider_visible=False)
+)
+
+st.plotly_chart(fig_candle, use_container_width=True)
 
 
 
@@ -482,8 +558,9 @@ plt.yticks(rotation=0, color="white")
 
 st.pyplot(fig)
 
+
+"""
 import io
-# ... (le code existant)
 
 ######################################
 # Plot Correlation Heatmap using Matplotlib/Seaborn
@@ -546,3 +623,4 @@ if st.button("Save Correlation Plot (White Background)"):
     st.download_button("Download Plot as PNG", data=buf, file_name="correlation_heatmap.png", mime="image/png")
     
     plt.close(fig_save)
+"""
