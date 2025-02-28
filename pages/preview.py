@@ -416,6 +416,8 @@ for tbl in selected_tables:
     df = session.sql(query).to_pandas()
     # Rename raw columns to have the table prefix
     rename_dict = {col: f"{col}" for col in raw_cols}
+    if rename_dict == "SHORT_TERM_HOLDER_REALIZED_PRICE" : rename_dict = "STH_REALIZED_PRICE"
+    if rename_dict == "LONG_TERM_HOLDER_REALIZED_PRICE" : rename_dict = "LTH_REALIZED_PRICE"
     df.rename(columns=rename_dict, inplace=True)
     df_list.append(df)
 
