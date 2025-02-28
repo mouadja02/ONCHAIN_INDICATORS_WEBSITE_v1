@@ -328,7 +328,7 @@ TABLE_DICT = {
 with st.sidebar:
     st.header("Correlation Settings")
     
-    # Let user select one or more tables for correlation analysis.
+    # Select tables to include
     selected_tables = st.multiselect(
         "Select tables to include:",
         list(TABLE_DICT.keys()),
@@ -336,7 +336,7 @@ with st.sidebar:
         help="Choose the on-chain tables you want to analyze."
     )
     
-    # Date range: Start date and optional End date.
+    # Date range: Start and optional End date (with unique keys)
     default_start_date = datetime.date(2015, 1, 1)
     start_date = st.date_input("Start Date", value=default_start_date, key="corr_start_date")
     
@@ -347,6 +347,35 @@ with st.sidebar:
     else:
         end_date = None
 
+    # Build the union of available features (renamed with table prefix)
+    available_features = []
+    for tbl in selected_tables:
+        tbl_info = TABLE_DICT[tbl]
+        for col in tbl_info["numeric_cols"]:
+            available_features.append(f"{tbl}:{col}")
+    
+    # Let the user choose which features (from the selected tables) to include
+    selected_features = st.multiselect(
+        "Select Features for Correlation:",
+        available_features,
+        default=available_features,
+        key="selected_features"
+    )
+    
+    # Option to apply EMA on selected features
+    apply_ema = st.checkbox("Apply EMA on selected features", value=False, key="apply_ema")
+    if apply_ema:
+        ema_period = st.number_input("EMA Period (days)", min_value=2, max_value=200, value=20, key="ema_period")
+        # Let user select from the features they already selected, which ones to EMA-transform
+        ema_features = st.multiselect(
+            "Select features to apply EMA on (raw values will be replaced):",
+            selected_features,
+            default=selected_features,
+            key="ema_features"
+        )
+    else:
+        ema_features = []
+
 ######################################
 # Data Query & Merge
 ######################################
@@ -354,9 +383,14 @@ df_list = []
 for tbl in selected_tables:
     tbl_info = TABLE_DICT[tbl]
     date_col = tbl_info["date_col"]
-    numeric_cols = tbl_info["numeric_cols"]
-    # Build the query for this table
-    cols_for_query = ", ".join(numeric_cols)
+    # Determine which numeric columns from this table are selected by the user.
+    table_features = {f"{tbl}:{col}" for col in tbl_info["numeric_cols"]}
+    features_to_query = table_features.intersection(set(selected_features))
+    if not features_to_query:
+        continue  # Skip table if no feature is selected from it.
+    # Map back to raw column names (remove prefix)
+    raw_cols = [feat.split(":", 1)[1] for feat in features_to_query]
+    cols_for_query = ", ".join(raw_cols)
     query = f"""
         SELECT
             CAST({date_col} AS DATE) AS DATE,
@@ -367,30 +401,41 @@ for tbl in selected_tables:
     if end_date:
         query += f" AND CAST({date_col} AS DATE) <= '{end_date}'\n"
     query += "ORDER BY DATE"
-    
     df = session.sql(query).to_pandas()
-    # Rename numeric columns to include table name prefix (to avoid duplicate names)
-    rename_dict = {col: f"{tbl}:{col}" for col in numeric_cols}
+    # Rename raw columns to have the table prefix
+    rename_dict = {col: f"{tbl}:{col}" for col in raw_cols}
     df.rename(columns=rename_dict, inplace=True)
     df_list.append(df)
 
 if not df_list:
-    st.error("No tables selected or no data returned.")
+    st.error("No data returned for selected tables/features.")
     st.stop()
 
-# Merge all dataframes on DATE using outer join
+# Merge all dataframes on DATE using an outer join
 merged_df = df_list[0]
 for df in df_list[1:]:
     merged_df = pd.merge(merged_df, df, on="DATE", how="outer")
 merged_df.sort_values("DATE", inplace=True)
-
-# Option: drop rows where all values are NaN
 merged_df = merged_df.dropna(how="all")
+
+######################################
+# Apply EMA (if selected)
+######################################
+if apply_ema:
+    for feature in ema_features:
+        if feature in merged_df.columns:
+            # Compute EMA and replace raw values with EMA values
+            ema_col = f"EMA_{feature}"
+            merged_df[ema_col] = merged_df[feature].ewm(span=ema_period).mean()
+            # Replace raw feature with EMA version
+            merged_df[feature] = merged_df[ema_col]
+            # Optionally drop the temporary EMA column:
+            merged_df.drop(columns=[ema_col], inplace=True)
 
 ######################################
 # Compute Correlation Matrix
 ######################################
-# Remove the DATE column for correlation computation
+# Remove DATE column for correlation computation
 corr_matrix = merged_df.drop(columns=["DATE"]).corr()
 
 ######################################
@@ -398,17 +443,15 @@ corr_matrix = merged_df.drop(columns=["DATE"]).corr()
 ######################################
 st.subheader("Correlation Matrix Heatmap")
 
-# Set figure size dynamically based on number of features
 num_features = len(corr_matrix.columns)
 fig_width = max(8, num_features * 0.8)
 fig_height = max(6, num_features * 0.8)
 fig, ax = plt.subplots(figsize=(fig_width, fig_height))
 
-# Set figure and axes background to black
+# Set dark background
 fig.patch.set_facecolor("black")
 ax.set_facecolor("black")
 
-# Create heatmap using seaborn
 sns.heatmap(
     corr_matrix,
     annot=True,
@@ -420,8 +463,6 @@ sns.heatmap(
     fmt=".2f",
     cbar_kws={'shrink': 0.75, 'label': 'Correlation'}
 )
-
-# Set title and tick parameters to white for contrast
 ax.set_title("Correlation Matrix of On-chain Features", color="white")
 plt.xticks(rotation=45, ha="right", color="white")
 plt.yticks(rotation=0, color="white")
