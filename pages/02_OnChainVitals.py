@@ -123,7 +123,7 @@ TABLE_DICT = {
     "STOCK TO FLOW": {
         "table_name": "BTC_DATA.DATA.STOCK_TO_FLOW",
         "date_col": "DATE",
-        "numeric_cols": ["STOCK", "FLOW", "STOCK_TO_FLOW_RATIO_463", "STOCK_TO_FLOW_RATIO_365", "MODEL_PRICE", "MODEL_VARIANCE"]
+        "numeric_cols": ["STOCK", "FLOW", "AVG_RATIO_365", "AVG_RATIO_463", "MODEL_PRICE_365", "MODEL_PRICE_463", "MODEL_VARIANCE"]
     },
     "TX COUNT": {
         "table_name": "BTC_DATA.DATA.TX_COUNT",
