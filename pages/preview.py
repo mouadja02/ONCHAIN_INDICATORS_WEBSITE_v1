@@ -232,7 +232,7 @@ TABLE_DICT = {
         "table_name": "BTC_DATA.DATA.BTC_PRICE_USD",
         "date_col": "DATE",
         "numeric_cols": [
-            "BTC_>PRICE_USD",
+            "BTC_PRICE_USD",
         ]
     },
     "BTC PRICE MOUVEMENT": {
