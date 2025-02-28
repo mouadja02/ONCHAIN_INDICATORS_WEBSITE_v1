@@ -191,7 +191,9 @@ fig.update_yaxes(
 # Display Plot
 st.plotly_chart(fig, use_container_width=True)
 
-st.markdown("Green (🔼 Increase, > 0.5%)\nYellow (⏸ Unchanged, within ±0.5%)\nRed (🔽 Decrease, > 0.5%)", anchor=None, help=None, divider=False)
-
-
-
+st.markdown("""
+**Legend:**  
+🟢 **Green (🔼 Increase, > 0.5%)**  
+🟡 **Yellow (⏸ Unchanged, within ±0.5%)**  
+🔴 **Red (🔽 Decrease, > 0.5%)**
+""", unsafe_allow_html=True)
