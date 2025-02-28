@@ -448,7 +448,7 @@ if apply_ema:
 # Compute Correlation Matrix
 ######################################
 # Remove DATE column for correlation computation
-corr_matrix = merged_df.drop(columns=["DATE"]).corr()
+corr_matrix = merged_df.drop(columns=["DATE"]).corr(method='pearson')
 
 ######################################
 # Plot Correlation Heatmap using Matplotlib/Seaborn
