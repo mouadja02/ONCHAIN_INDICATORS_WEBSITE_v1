@@ -193,7 +193,7 @@ st.plotly_chart(fig, use_container_width=True)
 
 st.markdown("""
 **Legend:**  
-🟢 **Green (🔼 Increase, > 0.5%)**  
-🟡 **Yellow (⏸ Unchanged, within ±0.5%)**  
-🔴 **Red (🔽 Decrease, > 0.5%)**
+🟢 **Green (🔼 Increase, > Threshold for unchanged state)**  
+🟡 **Yellow (⏸ Unchanged, within ± Threshold for unchanged state)**  
+🔴 **Red (🔽 Decrease, > Threshold for unchanged state)**
 """, unsafe_allow_html=True)
