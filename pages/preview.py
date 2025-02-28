@@ -476,7 +476,7 @@ sns.heatmap(
     cbar_kws={'shrink': 0.75, 'label': 'Correlation'}
 )
 ax.set_title("Correlation Matrix of On-chain Features", color="white")
-plt.xticks(rotation=90, ha="right", color="white")
+plt.xticks(rotation=45, ha="right", color="white")
 plt.yticks(rotation=0, color="white")
 
 st.pyplot(fig)
