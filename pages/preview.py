@@ -328,7 +328,7 @@ TABLE_DICT = {
 with st.sidebar:
     st.header("Correlation Settings")
     
-    # Select one or more tables
+    # Let user select one or more tables for correlation analysis.
     selected_tables = st.multiselect(
         "Select tables to include:",
         list(TABLE_DICT.keys()),
@@ -336,7 +336,7 @@ with st.sidebar:
         help="Choose the on-chain tables you want to analyze."
     )
     
-    # Date range controls with unique keys
+    # Date range: Start date and optional End date.
     default_start_date = datetime.date(2015, 1, 1)
     start_date = st.date_input("Start Date", value=default_start_date, key="corr_start_date")
     
@@ -355,8 +355,8 @@ for tbl in selected_tables:
     tbl_info = TABLE_DICT[tbl]
     date_col = tbl_info["date_col"]
     numeric_cols = tbl_info["numeric_cols"]
+    # Build the query for this table
     cols_for_query = ", ".join(numeric_cols)
-    
     query = f"""
         SELECT
             CAST({date_col} AS DATE) AS DATE,
@@ -369,7 +369,7 @@ for tbl in selected_tables:
     query += "ORDER BY DATE"
     
     df = session.sql(query).to_pandas()
-    # Rename columns to include table name prefix for uniqueness
+    # Rename numeric columns to include table name prefix (to avoid duplicate names)
     rename_dict = {col: f"{tbl}:{col}" for col in numeric_cols}
     df.rename(columns=rename_dict, inplace=True)
     df_list.append(df)
@@ -383,15 +383,18 @@ merged_df = df_list[0]
 for df in df_list[1:]:
     merged_df = pd.merge(merged_df, df, on="DATE", how="outer")
 merged_df.sort_values("DATE", inplace=True)
+
+# Option: drop rows where all values are NaN
 merged_df = merged_df.dropna(how="all")
 
 ######################################
 # Compute Correlation Matrix
 ######################################
+# Remove the DATE column for correlation computation
 corr_matrix = merged_df.drop(columns=["DATE"]).corr()
 
 ######################################
-# Plot Correlation Heatmap with Matplotlib
+# Plot Correlation Heatmap using Matplotlib/Seaborn
 ######################################
 st.subheader("Correlation Matrix Heatmap")
 
@@ -400,6 +403,10 @@ num_features = len(corr_matrix.columns)
 fig_width = max(8, num_features * 0.8)
 fig_height = max(6, num_features * 0.8)
 fig, ax = plt.subplots(figsize=(fig_width, fig_height))
+
+# Set figure and axes background to black
+fig.patch.set_facecolor("black")
+ax.set_facecolor("black")
 
 # Create heatmap using seaborn
 sns.heatmap(
@@ -411,8 +418,10 @@ sns.heatmap(
     square=True,
     ax=ax,
     fmt=".2f",
-    cbar_kws={'shrink': 0.75}
+    cbar_kws={'shrink': 0.75, 'label': 'Correlation'}
 )
+
+# Set title and tick parameters to white for contrast
 ax.set_title("Correlation Matrix of On-chain Features", color="white")
 plt.xticks(rotation=45, ha="right", color="white")
 plt.yticks(rotation=0, color="white")
