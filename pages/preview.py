@@ -3,8 +3,12 @@ import pandas as pd
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 import plotly.express as px
+import matplotlib.pyplot as plt
+import seaborn as sns
 import datetime
 import random
+
+
 
 ######################################
 # 1) Page Configuration & Dark Theme
@@ -324,7 +328,7 @@ TABLE_DICT = {
 with st.sidebar:
     st.header("Correlation Settings")
     
-    # Let user select one or more tables for correlation analysis.
+    # Select one or more tables
     selected_tables = st.multiselect(
         "Select tables to include:",
         list(TABLE_DICT.keys()),
@@ -332,7 +336,7 @@ with st.sidebar:
         help="Choose the on-chain tables you want to analyze."
     )
     
-    # Date range: Start date and optional End date.
+    # Date range controls with unique keys
     default_start_date = datetime.date(2015, 1, 1)
     start_date = st.date_input("Start Date", value=default_start_date, key="corr_start_date")
     
@@ -351,8 +355,8 @@ for tbl in selected_tables:
     tbl_info = TABLE_DICT[tbl]
     date_col = tbl_info["date_col"]
     numeric_cols = tbl_info["numeric_cols"]
-    # Build the query for this table
     cols_for_query = ", ".join(numeric_cols)
+    
     query = f"""
         SELECT
             CAST({date_col} AS DATE) AS DATE,
@@ -365,7 +369,7 @@ for tbl in selected_tables:
     query += "ORDER BY DATE"
     
     df = session.sql(query).to_pandas()
-    # Rename numeric columns to include table name prefix (to avoid duplicate names)
+    # Rename columns to include table name prefix for uniqueness
     rename_dict = {col: f"{tbl}:{col}" for col in numeric_cols}
     df.rename(columns=rename_dict, inplace=True)
     df_list.append(df)
@@ -379,25 +383,38 @@ merged_df = df_list[0]
 for df in df_list[1:]:
     merged_df = pd.merge(merged_df, df, on="DATE", how="outer")
 merged_df.sort_values("DATE", inplace=True)
-
-# Option: drop rows where all values are NaN
 merged_df = merged_df.dropna(how="all")
 
 ######################################
 # Compute Correlation Matrix
 ######################################
-# Remove the DATE column for correlation computation
 corr_matrix = merged_df.drop(columns=["DATE"]).corr()
 
 ######################################
-# Plot Correlation Heatmap
+# Plot Correlation Heatmap with Matplotlib
 ######################################
 st.subheader("Correlation Matrix Heatmap")
-fig = px.imshow(
+
+# Set figure size dynamically based on number of features
+num_features = len(corr_matrix.columns)
+fig_width = max(8, num_features * 0.8)
+fig_height = max(6, num_features * 0.8)
+fig, ax = plt.subplots(figsize=(fig_width, fig_height))
+
+# Create heatmap using seaborn
+sns.heatmap(
     corr_matrix,
-    text_auto=True,
-    color_continuous_scale="RdBu_r",
-    origin="lower",
-    title="Correlation Matrix of On-chain Features"
+    annot=True,
+    cmap="RdBu_r",
+    vmin=-1,
+    vmax=1,
+    square=True,
+    ax=ax,
+    fmt=".2f",
+    cbar_kws={'shrink': 0.75}
 )
-st.plotly_chart(fig, use_container_width=True)
+ax.set_title("Correlation Matrix of On-chain Features", color="white")
+plt.xticks(rotation=45, ha="right", color="white")
+plt.yticks(rotation=0, color="white")
+
+st.pyplot(fig)
