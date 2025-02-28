@@ -8,13 +8,11 @@ import seaborn as sns
 import datetime
 import random
 
-
-
 ######################################
 # 1) Page Configuration & Dark Theme
 ######################################
 st.set_page_config(
-    page_title="Bitcoin Price Mouvement Dashboard",
+    page_title="Bitcoin On-chain Indicators Dashboard",
     layout="wide",
     initial_sidebar_state="expanded"
 )
@@ -26,7 +24,7 @@ st.markdown(
     .css-18e3th9, .css-1dp5vir, .css-12oz5g7, .st-bq {
         background-color: #000000 !important;
     }
-    .css-15zrgzn, .css-1hynb2t, .css-1xh633b, .css-17eq0hr {
+    .css-15zrgzn, .css-1dp5vir, .css-1xh633b, .css-17eq0hr {
         color: #f0f2f6;
     }
     .css-1xh633b a { color: #1FA2FF; }
@@ -44,16 +42,16 @@ session = cx.session()
 ######################################
 # 3) Define Color Palette & Session State
 ######################################
-COLOR_PALETTE = ["#E74C3C", "#F1C40F", "#2ECC71", "#3498DB", "#9B59B6",
-                 "#1ABC9C", "#E67E22", "#FF00FF", "#FF1493", "#FFD700"]
-
+COLOR_PALETTE = [
+    "#E74C3C", "#F1C40F", "#2ECC71", "#3498DB", "#9B59B6",
+    "#1ABC9C", "#E67E22", "#FF00FF", "#FF1493", "#FFD700"
+]
 if "color_palette" not in st.session_state:
     st.session_state["color_palette"] = COLOR_PALETTE.copy()
     random.shuffle(st.session_state["color_palette"])
 
 if "assigned_colors" not in st.session_state:
     st.session_state["assigned_colors"] = {}
-
 if "colors" not in st.session_state:
     st.session_state["colors"] = {}
 
@@ -75,23 +73,38 @@ st.title("Bitcoin On-chain Indicators Dashboard")
 with st.sidebar:
     st.header("BTC Price Options")
     show_btc_price = st.checkbox("Show BTC Price?", value=True)
-    chart_type_price = st.radio("BTC Price Chart Type", ["Line", "Bars"], index=0)
+    
+    # Choose chart style: Line, Bars, or Candlestick.
+    price_chart_style = st.radio("BTC Price Chart Style", ["Line", "Bars", "Candlestick"], index=0)
+    
+    # For Line or Bars, choose axis scale.
     scale_option_price = st.radio("BTC Price Axis", ["Linear", "Log"], index=0)
-
+    
+    # If Candlestick is selected, choose candle interval.
+    candle_interval = "DAY"  # default value
+    if price_chart_style == "Candlestick":
+        candle_interval_choice = st.radio("Candle Interval", ["Daily", "Weekly", "Monthly"], index=0)
+        if candle_interval_choice == "Daily":
+            candle_interval = "DAY"
+        elif candle_interval_choice == "Weekly":
+            candle_interval = "WEEK"
+        elif candle_interval_choice == "Monthly":
+            candle_interval = "MONTH"
+    
     st.markdown("---")
     st.header("Price Movement Detection")
     show_movement_scatter = st.checkbox("Show BTC Price Movement States?", value=True)
     movement_threshold = st.number_input("Threshold for unchanged state (%)", min_value=0.1, max_value=5.0, value=0.5)
-
+    
     st.markdown("---")
     st.header("Date Range Selection")
     default_start_date = datetime.date(2015, 1, 1)
-    selected_start_date = st.date_input("Start Date", value=default_start_date)
-
-    activate_end_date = st.checkbox("Activate End Date", value=False)
+    selected_start_date = st.date_input("Start Date", value=default_start_date, key="start_date")
+    
+    activate_end_date = st.checkbox("Activate End Date", value=False, key="activate_end_date")
     if activate_end_date:
         default_end_date = datetime.date.today()
-        selected_end_date = st.date_input("End Date", value=default_end_date)
+        selected_end_date = st.date_input("End Date", value=default_end_date, key="end_date")
     else:
         selected_end_date = None
 
@@ -101,9 +114,9 @@ with st.sidebar:
 btc_movement_query = f"""
     WITH price_changes AS (
         SELECT 
-            CAST(DATE AS DATE) AS DATE,
-            BTC_PRICE_USD,
-            LAG(BTC_PRICE_USD) OVER (ORDER BY DATE) AS previous_price
+            CAST({BTC_PRICE_DATE_COL} AS DATE) AS DATE,
+            {BTC_PRICE_VALUE_COL} AS BTC_PRICE_USD,
+            LAG({BTC_PRICE_VALUE_COL}) OVER (ORDER BY {BTC_PRICE_DATE_COL}) AS previous_price
         FROM {BTC_PRICE_TABLE}
     )
     SELECT 
@@ -119,49 +132,88 @@ btc_movement_query = f"""
     WHERE BTC_PRICE_USD IS NOT NULL
       AND DATE >= '{selected_start_date}'
 """
-
 if selected_end_date:
     btc_movement_query += f" AND DATE <= '{selected_end_date}'"
-
 btc_movement_query += " ORDER BY DATE"
 
 df_btc_movement = session.sql(btc_movement_query).to_pandas()
-
-# Map movement states to colors
-color_map = {1: "#2ECC71", 0: "#F1C40F", -1: "#E74C3C"}  
+color_map = {1: "#2ECC71", 0: "#F1C40F", -1: "#E74C3C"}
 df_btc_movement["Color"] = df_btc_movement["PRICE_MOVEMENT"].map(color_map)
 
 ######################################
-# 8) MAIN PLOT (BTC Price + Scatter)
+# 8) MAIN PLOT (BTC Price + Candles/Scatter)
 ######################################
 fig = make_subplots(specs=[[{"secondary_y": True}]])
 
-# Plot BTC Price (Line or Bar)
+# Plot BTC Price:
 if show_btc_price:
-    if chart_type_price == "Line":
+    if price_chart_style == "Candlestick":
+        # Query aggregated BTC Price candles using the selected interval.
+        candle_query = f"""
+            SELECT
+                DATE_TRUNC('{candle_interval}', {BTC_PRICE_DATE_COL}) AS CANDLE_DATE,
+                MIN(BTC_PRICE_USD) AS low,
+                MAX(BTC_PRICE_USD) AS high,
+                MIN_BY(BTC_PRICE_USD, {BTC_PRICE_DATE_COL}) AS open,
+                MAX_BY(BTC_PRICE_USD, {BTC_PRICE_DATE_COL}) AS close
+            FROM {BTC_PRICE_TABLE}
+            WHERE {BTC_PRICE_VALUE_COL} IS NOT NULL
+              AND CAST({BTC_PRICE_DATE_COL} AS DATE) >= '{selected_start_date}'
+        """
+        if selected_end_date:
+            candle_query += f" AND CAST({BTC_PRICE_DATE_COL} AS DATE) <= '{selected_end_date}'\n"
+        candle_query += "GROUP BY CANDLE_DATE ORDER BY CANDLE_DATE"
+        df_candles = session.sql(candle_query).to_pandas()
+        
         fig.add_trace(
-            go.Scatter(
-                x=df_btc_movement["DATE"],
-                y=df_btc_movement["BTC_PRICE_USD"],
-                mode="lines",
-                name="BTC Price (USD)",
-                line=dict(color="#3498DB")
+            go.Candlestick(
+                x=df_candles["CANDLE_DATE"],
+                open=df_candles["open"],
+                high=df_candles["high"],
+                low=df_candles["low"],
+                close=df_candles["close"],
+                name="BTC Candles"
             ),
             secondary_y=True
         )
     else:
-        fig.add_trace(
-            go.Bar(
-                x=df_btc_movement["DATE"],
-                y=df_btc_movement["BTC_PRICE_USD"],
-                name="BTC Price (USD)",
-                marker_color="#3498DB"
-            ),
-            secondary_y=True
-        )
+        # Query raw BTC Price data
+        btc_query = f"""
+            SELECT
+                CAST({BTC_PRICE_DATE_COL} AS DATE) AS DATE,
+                {BTC_PRICE_VALUE_COL}
+            FROM {BTC_PRICE_TABLE}
+            WHERE {BTC_PRICE_VALUE_COL} IS NOT NULL
+              AND CAST({BTC_PRICE_DATE_COL} AS DATE) >= '{selected_start_date}'
+        """
+        if selected_end_date:
+            btc_query += f" AND CAST({BTC_PRICE_DATE_COL} AS DATE) <= '{selected_end_date}'\n"
+        btc_query += "ORDER BY DATE"
+        df_btc = session.sql(btc_query).to_pandas()
+        
+        if price_chart_style == "Line":
+            fig.add_trace(
+                go.Scatter(
+                    x=df_btc["DATE"],
+                    y=df_btc[BTC_PRICE_VALUE_COL],
+                    mode="lines",
+                    name="BTC Price (USD)",
+                    line=dict(color="#3498DB")
+                ),
+                secondary_y=True
+            )
+        else:
+            fig.add_trace(
+                go.Bar(
+                    x=df_btc["DATE"],
+                    y=df_btc[BTC_PRICE_VALUE_COL],
+                    name="BTC Price (USD)",
+                    marker_color="#3498DB"
+                ),
+                secondary_y=True
+            )
 
-# Scatter plot for BTC Price Movement States
-if show_movement_scatter:
+    # Overlay scatter for BTC Price movement states
     fig.add_trace(
         go.Scatter(
             x=df_btc_movement["DATE"],
@@ -173,19 +225,22 @@ if show_movement_scatter:
         secondary_y=True
     )
 
-# Update Layout
+# Update layout and axes
+x_range = [selected_start_date.strftime("%Y-%m-%d")]
+if selected_end_date:
+    x_range.append(selected_end_date.strftime("%Y-%m-%d"))
+else:
+    # Use the maximum date from the BTC movement data
+    x_range.append(df_btc_movement["DATE"].max().strftime("%Y-%m-%d"))
+fig.update_xaxes(title_text="Date", gridcolor="#4f5b66", range=x_range)
 fig.update_layout(
     title="Bitcoin Price & Movement States",
-    xaxis_title="Date",
-    yaxis_title="BTC Price (USD)",
     hovermode="x unified",
     font=dict(color="#f0f2f6"),
     paper_bgcolor="#000000",
     plot_bgcolor="#000000",
     legend=dict(x=0, y=1.05, orientation="h", bgcolor="rgba(0,0,0,0)")
 )
-
-# Update Axis
 fig.update_yaxes(
     title_text="BTC Price (USD)",
     type="log" if scale_option_price == "Log" else "linear",
@@ -193,8 +248,8 @@ fig.update_yaxes(
     gridcolor="#4f5b66"
 )
 
-# Display Plot
 st.plotly_chart(fig, use_container_width=True)
+
 
 st.markdown("""
 **Legend:**  
