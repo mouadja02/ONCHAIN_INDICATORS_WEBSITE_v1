@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
+import plotly.express as px
 import datetime
 import random
 
@@ -197,3 +198,205 @@ st.markdown("""
 🟡 **Yellow (⏸ Unchanged, within ± Threshold for unchanged state)**  
 🔴 **Red (🔽 Decrease, > Threshold for unchanged state)**
 """, unsafe_allow_html=True)
+
+
+
+
+st.title("Correlation Matrix of On-chain Features")
+
+
+######################################
+# Table Configurations
+######################################
+TABLE_DICT = {
+    "ACTIVE ADDRESSES": {
+        "table_name": "BTC_DATA.DATA.ACTIVE_ADDRESSES",
+        "date_col": "DATE", 
+        "numeric_cols": ["ACTIVE_ADDRESSES"]
+    },
+    "ADDRESSES PROFIT LOSS PERCENT": {
+        "table_name": "BTC_DATA.DATA.ADDRESSES_PROFIT_LOSS_PERCENT",
+        "date_col": "sale_date", 
+        "numeric_cols": ["PERCENT_PROFIT", "PERCENT_LOSS"]
+    },
+    "REALIZED CAP AND PRICE": {
+        "table_name": "BTC_DATA.DATA.BTC_REALIZED_CAP_AND_PRICE",
+        "date_col": "DATE",
+        "numeric_cols": [
+            "REALIZED_CAP_USD",
+            "REALIZED_PRICE_USD",
+            "TOTAL_UNSPENT_BTC"
+        ]
+    },
+    "BTC PRICE": {
+        "table_name": "BTC_DATA.DATA.BTC_PRICE_USD",
+        "date_col": "DATE",
+        "numeric_cols": [
+            "BTC_>PRICE_USD",
+        ]
+    },
+    "BTC PRICE MOUVEMENT": {
+        "table_name": "BTC_DATA.DATA.BTC_PRICE_MOVEMENT",
+        "date_col": "DATE",
+        "numeric_cols": [
+            "PRICE_MOVEMENT"
+        ]
+    },
+    "CDD": {
+        "table_name": "BTC_DATA.DATA.CDD",
+        "date_col": "DATE",
+        "numeric_cols": ["CDD_RAW", "CDD_30_DMA", "CDD_90_DMA"]
+    },
+    "EXCHANGE_FLOW": {
+        "table_name": "BTC_DATA.DATA.EXCHANGE_FLOW",
+        "date_col": "DAY",
+        "numeric_cols": ["INFLOW", "OUTFLOW", "NETFLOW"]
+    },
+    "HOLDER REALIZED PRICES": {
+        "table_name": "BTC_DATA.DATA.HOLDER_REALIZED_PRICES",
+        "date_col": "DATE",
+        "numeric_cols": ["SHORT_TERM_HOLDER_REALIZED_PRICE", "LONG_TERM_HOLDER_REALIZED_PRICE"]
+    },
+    "MVRV": {
+        "table_name": "BTC_DATA.DATA.MVRV",
+        "date_col": "DATE",
+        "numeric_cols": ["MVRV"]
+    },
+    "MVRV WITH HOLDER TYPES": {
+        "table_name": "BTC_DATA.DATA.MVRV_WITH_HOLDER_TYPES",
+        "date_col": "DATE",
+        "numeric_cols": ["OVERALL_MVRV", "STH_MVRV", "LTH_MVRV"]
+    },
+    "NUPL": {
+        "table_name": "BTC_DATA.DATA.NUPL",
+        "date_col": "DATE",
+        "numeric_cols": ["NUPL", "NUPL_PERCENT"]
+    },
+    "REALIZED_CAP_VS_MARKET_CAP": {
+        "table_name": "BTC_DATA.DATA.REALIZED_CAP_VS_MARKET_CAP",
+        "date_col": "DATE",
+        "numeric_cols": ["MARKET_CAP_USD", "REALIZED_CAP_USD"]
+    },
+    "SOPR": {
+        "table_name": "BTC_DATA.DATA.SOPR",
+        "date_col": "spent_date",
+        "numeric_cols": ["SOPR"]
+    },
+    "SOPR WITH HOLDER TYPES": {
+        "table_name": "BTC_DATA.DATA.SOPR_WITH_HOLDER_TYPES",
+        "date_col": "sale_date",
+        "numeric_cols": ["OVERALL_SOPR", "STH_SOPR", "LTH_SOPR"]
+    },
+    "STOCK TO FLOW MODEL": {
+        "table_name": "BTC_DATA.DATA.STOCK_TO_FLOW_MODEL",
+        "date_col": "DATE",
+        "numeric_cols": ["STOCK", "FLOW", "STOCK_TO_FLOW", "MODEL_PRICE"]
+    },
+    "TX COUNT": {
+        "table_name": "BTC_DATA.DATA.TX_COUNT",
+        "date_col": "BLOCK_TIMESTAMP",
+        "numeric_cols": ["TX_COUNT"]
+    },
+    "TX VOLUME": {
+        "table_name": "BTC_DATA.DATA.TX_VOLUME",
+        "date_col": "DATE",
+        "numeric_cols": ["DAILY_TX_VOLUME_BTC"]
+    },
+    "UTXO LIFECYCLE": {
+        "table_name": "BTC_DATA.DATA.UTXO_LIFECYCLE",
+        "date_col": "CREATED_TIMESTAMP",
+        "numeric_cols": ["BTC_VALUE"]
+    },
+    "PUELL MULTIPLE": {
+        "table_name": "BTC_DATA.DATA.PUELL_MULTIPLE",
+        "date_col": "DATE",
+        "numeric_cols": [
+            "MINTED_BTC",
+            "DAILY_ISSUANCE_USD",
+            "MA_365_ISSUANCE_USD",
+            "PUELL_MULTIPLE"
+        ]
+    },
+}
+######################################
+# Sidebar Controls
+######################################
+with st.sidebar:
+    st.header("Correlation Settings")
+    
+    # Let user select one or more tables for correlation analysis.
+    selected_tables = st.multiselect(
+        "Select tables to include:",
+        list(TABLE_DICT.keys()),
+        default=list(TABLE_DICT.keys())[:3],
+        help="Choose the on-chain tables you want to analyze."
+    )
+    
+    # Date range: Start date and optional End date.
+    default_start_date = datetime.date(2015, 1, 1)
+    start_date = st.date_input("Start Date", value=default_start_date)
+    
+    activate_end_date = st.checkbox("Activate End Date", value=False)
+    if activate_end_date:
+        default_end_date = datetime.date.today()
+        end_date = st.date_input("End Date", value=default_end_date)
+    else:
+        end_date = None
+
+######################################
+# Data Query & Merge
+######################################
+df_list = []
+for tbl in selected_tables:
+    tbl_info = TABLE_DICT[tbl]
+    date_col = tbl_info["date_col"]
+    numeric_cols = tbl_info["numeric_cols"]
+    # Build the query for this table
+    cols_for_query = ", ".join(numeric_cols)
+    query = f"""
+        SELECT
+            CAST({date_col} AS DATE) AS DATE,
+            {cols_for_query}
+        FROM {tbl_info['table_name']}
+        WHERE CAST({date_col} AS DATE) >= '{start_date}'
+    """
+    if end_date:
+        query += f" AND CAST({date_col} AS DATE) <= '{end_date}'\n"
+    query += "ORDER BY DATE"
+    
+    df = session.sql(query).to_pandas()
+    # Rename numeric columns to include table name prefix (to avoid duplicate names)
+    rename_dict = {col: f"{tbl}:{col}" for col in numeric_cols}
+    df.rename(columns=rename_dict, inplace=True)
+    df_list.append(df)
+
+if not df_list:
+    st.error("No tables selected or no data returned.")
+    st.stop()
+
+# Merge all dataframes on DATE using outer join
+merged_df = df_list[0]
+for df in df_list[1:]:
+    merged_df = pd.merge(merged_df, df, on="DATE", how="outer")
+merged_df.sort_values("DATE", inplace=True)
+
+# Option: drop rows where all values are NaN
+merged_df = merged_df.dropna(how="all")
+
+######################################
+# Compute Correlation Matrix
+######################################
+# Remove the DATE column for correlation computation
+corr_matrix = merged_df.drop(columns=["DATE"]).corr()
+
+######################################
+# Plot Correlation Heatmap
+######################################
+st.subheader("Correlation Matrix Heatmap")
+fig = px.imshow(corr_matrix,
+                text_auto=True,
+                color_continuous_scale="RdBu_r",
+                origin="lower",
+                title="Correlation Matrix of On-chain Features")
+st.plotly_chart(fig, use_container_width=True)
+
