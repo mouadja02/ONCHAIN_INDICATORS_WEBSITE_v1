@@ -415,7 +415,7 @@ for tbl in selected_tables:
     query += "ORDER BY DATE"
     df = session.sql(query).to_pandas()
     # Rename raw columns to have the table prefix
-    rename_dict = {col: f"{tbl}:{col}" for col in raw_cols}
+    rename_dict = {col: f"{col}" for col in raw_cols}
     df.rename(columns=rename_dict, inplace=True)
     df_list.append(df)
 
