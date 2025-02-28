@@ -7,6 +7,7 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 import datetime
 import random
+import calendar
 
 
 
@@ -212,27 +213,33 @@ st.header("BTC Candlestick Chart")
 # Sidebar selection for the candle chart span
 candle_span = st.selectbox("Select Candle Chart Span", ["Daily", "Weekly", "Monthly"], index=0)
 
-# Map the chosen span to the corresponding Snowflake date_trunc interval
+# Determine the period expression based on the selected span
 if candle_span == "Daily":
-    span_interval = "day"
+    period_expr = f"DATE_TRUNC('day', {BTC_PRICE_DATE_COL})"
 elif candle_span == "Weekly":
-    span_interval = "week"
+    # For weekly grouping from Monday to Sunday, calculate Monday as the period start.
+    # In Snowflake, DAYOFWEEK returns 1 for Sunday, 2 for Monday, ..., 7 for Saturday.
+    # For a Sunday record, subtract 6 days; otherwise, subtract (DAYOFWEEK - 2) days.
+    period_expr = (
+        f"DATEADD(day, CASE WHEN DAYOFWEEK({BTC_PRICE_DATE_COL}) = 1 "
+        f"THEN -6 ELSE 2 - DAYOFWEEK({BTC_PRICE_DATE_COL}) END, {BTC_PRICE_DATE_COL})"
+    )
 elif candle_span == "Monthly":
-    span_interval = "month"
+    period_expr = f"DATE_TRUNC('month', {BTC_PRICE_DATE_COL})"
 
 # Build the query to aggregate open, high, low, close for each period
 candle_query = f"""
 WITH cte AS (
     SELECT 
-        DATE_TRUNC('{span_interval}', {BTC_PRICE_DATE_COL}) AS period,
+        {period_expr} AS period,
         {BTC_PRICE_DATE_COL} AS date,
         {BTC_PRICE_VALUE_COL} AS price,
         ROW_NUMBER() OVER (
-            PARTITION BY DATE_TRUNC('{span_interval}', {BTC_PRICE_DATE_COL})
+            PARTITION BY {period_expr}
             ORDER BY {BTC_PRICE_DATE_COL} ASC
         ) AS rn_asc,
         ROW_NUMBER() OVER (
-            PARTITION BY DATE_TRUNC('{span_interval}', {BTC_PRICE_DATE_COL})
+            PARTITION BY {period_expr}
             ORDER BY {BTC_PRICE_DATE_COL} DESC
         ) AS rn_desc
     FROM {BTC_PRICE_TABLE}
@@ -258,6 +265,16 @@ ORDER BY period
 # Execute the query and convert the result to a pandas DataFrame
 df_candle = session.sql(candle_query).to_pandas()
 
+# For Weekly and Monthly spans, optionally compute the period_end for display purposes.
+if candle_span == "Weekly":
+    # For a week that starts on Monday, the period end is 6 days later (Sunday).
+    df_candle['period_end'] = pd.to_datetime(df_candle['PERIOD']) + pd.Timedelta(days=6)
+elif candle_span == "Monthly":
+    # For monthly span, compute the last day of the month.
+    df_candle['period_end'] = pd.to_datetime(df_candle['PERIOD']).apply(
+        lambda d: d.replace(day=calendar.monthrange(d.year, d.month)[1])
+    )
+
 # Create and display the candlestick chart
 fig_candle = go.Figure(data=[go.Candlestick(
     x=df_candle["PERIOD"],
@@ -273,7 +290,6 @@ fig_candle.update_yaxes(
     type="log" if scale_option_price == "Log" else "linear",
     gridcolor="#4f5b66"
 )
-
 
 fig_candle.update_layout(
     title=f"BTC Candlestick Chart ({candle_span} Span)",
@@ -295,6 +311,7 @@ st.download_button(
     file_name=f"btc_candlestick_{candle_span.lower()}.csv",
     mime="text/csv",
 )
+
 
 st.title("Correlation Matrix of On-chain Features")
 
