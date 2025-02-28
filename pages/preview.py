@@ -276,6 +276,16 @@ TABLE_DICT = {
         "date_col": "DATE",
         "numeric_cols": ["NUPL", "NUPL_PERCENT"]
     },
+     "PUELL MULTIPLE": {
+        "table_name": "BTC_DATA.DATA.PUELL_MULTIPLE",
+        "date_col": "DATE",
+        "numeric_cols": [
+            "MINTED_BTC",
+            "DAILY_ISSUANCE_USD",
+            "MA_365_ISSUANCE_USD",
+            "PUELL_MULTIPLE"
+        ]
+    },
     "REALIZED_CAP_VS_MARKET_CAP": {
         "table_name": "BTC_DATA.DATA.REALIZED_CAP_VS_MARKET_CAP",
         "date_col": "DATE",
@@ -311,14 +321,15 @@ TABLE_DICT = {
         "date_col": "CREATED_TIMESTAMP",
         "numeric_cols": ["BTC_VALUE"]
     },
-    "PUELL MULTIPLE": {
-        "table_name": "BTC_DATA.DATA.PUELL_MULTIPLE",
-        "date_col": "DATE",
+    "TX BANDS": {
+        "table_name": "BTC_DATA.DATA.TX_BANDS",
+        "date_col": "TX_DATE",
         "numeric_cols": [
-            "MINTED_BTC",
-            "DAILY_ISSUANCE_USD",
-            "MA_365_ISSUANCE_USD",
-            "PUELL_MULTIPLE"
+            "TX_GT_1_BTC",
+            "TX_GT_10_BTC",
+            "TX_GT_100_BTC",
+            "TX_GT_1000_BTC",
+            "TX_GT_10000_BTC"
         ]
     },
 }
