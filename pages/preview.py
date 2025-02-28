@@ -334,12 +334,12 @@ with st.sidebar:
     
     # Date range: Start date and optional End date.
     default_start_date = datetime.date(2015, 1, 1)
-    start_date = st.date_input("Start Date", value=default_start_date)
+    start_date = st.date_input("Start Date", value=default_start_date, key="corr_start_date")
     
-    activate_end_date = st.checkbox("Activate End Date", value=False)
+    activate_end_date = st.checkbox("Activate End Date", value=False, key="corr_activate_end")
     if activate_end_date:
         default_end_date = datetime.date.today()
-        end_date = st.date_input("End Date", value=default_end_date)
+        end_date = st.date_input("End Date", value=default_end_date, key="corr_end_date")
     else:
         end_date = None
 
@@ -393,10 +393,11 @@ corr_matrix = merged_df.drop(columns=["DATE"]).corr()
 # Plot Correlation Heatmap
 ######################################
 st.subheader("Correlation Matrix Heatmap")
-fig = px.imshow(corr_matrix,
-                text_auto=True,
-                color_continuous_scale="RdBu_r",
-                origin="lower",
-                title="Correlation Matrix of On-chain Features")
+fig = px.imshow(
+    corr_matrix,
+    text_auto=True,
+    color_continuous_scale="RdBu_r",
+    origin="lower",
+    title="Correlation Matrix of On-chain Features"
+)
 st.plotly_chart(fig, use_container_width=True)
-
