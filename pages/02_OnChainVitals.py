@@ -88,7 +88,7 @@ TABLE_DICT = {
     "HOLDER REALIZED PRICES": {
         "table_name": "BTC_DATA.DATA.HOLDER_REALIZED_PRICES",
         "date_col": "DATE",
-        "numeric_cols": ["SHORT_TERM_HOLDER_REALIZED_PRICE", "LONG_TERM_HOLDER_REALIZED_PRICE"]
+        "numeric_cols": ["STH_REALIZED_PRICE", "LTH_REALIZED_PRICE"]
     },
     "MVRV": {
         "table_name": "BTC_DATA.DATA.MVRV",
