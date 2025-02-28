@@ -120,8 +120,8 @@ TABLE_DICT = {
         "date_col": "sale_date",
         "numeric_cols": ["OVERALL_SOPR", "STH_SOPR", "LTH_SOPR"]
     },
-    "STOCK TO FLOW MODEL": {
-        "table_name": "BTC_DATA.DATA.STOCK_TO_FLOW_MODEL",
+    "STOCK TO FLOW": {
+        "table_name": "BTC_DATA.DATA.STOCK_TO_FLOW",
         "date_col": "DATE",
         "numeric_cols": ["STOCK", "FLOW", "STOCK_TO_FLOW", "MODEL_PRICE"]
     },
