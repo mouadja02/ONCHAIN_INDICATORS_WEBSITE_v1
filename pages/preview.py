@@ -266,8 +266,14 @@ fig_candle = go.Figure(data=[go.Candlestick(
     low=df_candle["LOW"],
     close=df_candle["CLOSE"],
     increasing_line_color='green',
-    decreasing_line_color='red'
+    decreasing_line_color='red',
 )])
+
+fig_candle.update_yaxes(
+    type="log" if scale_option_price == "Log" else "linear",
+    gridcolor="#4f5b66"
+)
+
 
 fig_candle.update_layout(
     title=f"BTC Candlestick Chart ({candle_span} Span)",
