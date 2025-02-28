@@ -287,7 +287,14 @@ fig_candle.update_layout(
 
 st.plotly_chart(fig_candle, use_container_width=True)
 
-
+# Convert DataFrame to CSV and add a download button
+csv_data = df_candle.to_csv(index=False).encode('utf-8')
+st.download_button(
+    label="Download CSV",
+    data=csv_data,
+    file_name=f"btc_candlestick_{candle_span.lower()}.csv",
+    mime="text/csv",
+)
 
 st.title("Correlation Matrix of On-chain Features")
 
