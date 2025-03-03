@@ -549,60 +549,21 @@ def get_weekly_data(tbl_info, start_date, end_date):
 weekly_df_list = []
 for tbl in selected_tables:
     tbl_info = TABLE_DICT[tbl]
-    if tbl == "BTC_PRICE_MOVEMENT":
+    if weekly_df_list == []:
         # Use the provided BTC price movement weekly query
         btc_price_query = f"""
-        WITH weekly_avg AS (
-            SELECT 
-                DATEADD(day, 
-                    CASE 
-                        WHEN DAYOFWEEK(DATE) = 1 THEN -6 
-                        ELSE 2 - DAYOFWEEK(DATE) 
-                    END, DATE) AS week_start,
-                AVG(BTC_PRICE_USD) AS avg_price
-            FROM BTC_DATA.DATA.BTC_PRICE_USD
-            GROUP BY DATEADD(day, 
-                CASE 
-                    WHEN DAYOFWEEK(DATE) = 1 THEN -6 
-                    ELSE 2 - DAYOFWEEK(DATE) 
-                END, DATE)
-        )
-        SELECT
-            week_start AS DATE,
-            avg_price,
-            LAG(avg_price) OVER (ORDER BY week_start) AS prev_avg,
-            CASE 
-                WHEN LAG(avg_price) OVER (ORDER BY week_start) IS NULL THEN NULL
-                WHEN NULLIF(LAG(avg_price) OVER (ORDER BY week_start), 0) IS NULL THEN 0
-                WHEN ABS((avg_price - LAG(avg_price) OVER (ORDER BY week_start))
-                       / NULLIF(LAG(avg_price) OVER (ORDER BY week_start), 0) * 100) <= 0.5 THEN 0
-                WHEN (avg_price - LAG(avg_price) OVER (ORDER BY week_start))
-                     / NULLIF(LAG(avg_price) OVER (ORDER BY week_start), 0) * 100 > 0.5 
-                     AND (avg_price - LAG(avg_price) OVER (ORDER BY week_start))
-                     / NULLIF(LAG(avg_price) OVER (ORDER BY week_start), 0) * 100 < 8.0 THEN 1
-                WHEN (avg_price - LAG(avg_price) OVER (ORDER BY week_start))
-                     / NULLIF(LAG(avg_price) OVER (ORDER BY week_start), 0) * 100 >= 8.0 THEN 2
-                WHEN (avg_price - LAG(avg_price) OVER (ORDER BY week_start))
-                     / NULLIF(LAG(avg_price) OVER (ORDER BY week_start), 0) * 100 < -0.5 
-                     AND (avg_price - LAG(avg_price) OVER (ORDER BY week_start))
-                     / NULLIF(LAG(avg_price) OVER (ORDER BY week_start), 0) * 100 > -8.0 THEN -1
-                WHEN (avg_price - LAG(avg_price) OVER (ORDER BY week_start))
-                     / NULLIF(LAG(avg_price) OVER (ORDER BY week_start), 0) * 100 <= -8.0 THEN -2
-                ELSE 0
-            END AS price_movement_state
-        FROM weekly_avg
-        ORDER BY week_start;
+       SELECT * FROM BTC_DATA.DATA.BTC_PRICE_MOVEMENT_WEEKLY;
         """
         df_btc_weekly = session.sql(btc_price_query).to_pandas()
         # Rename columns so they include the table prefix
         df_btc_weekly.rename(columns={
-            "avg_price": "BTC_PRICE_MOVEMENT:AVG_PRICE",
-            "price_movement_state": "BTC_PRICE_MOVEMENT:PRICE_MOVEMENT_STATE"
+            "avg_price": "AVG_PRICE",
+            "price_movement_state": "PRICE_MOVEMENT"
         }, inplace=True)
         weekly_df_list.append(df_btc_weekly)
     else:
         df_tbl = get_weekly_data(tbl_info, start_date, end_date)
-        rename_dict = {col: f"{tbl}:{col}" for col in tbl_info["numeric_cols"]}
+        rename_dict = {col: f"{col}" for col in tbl_info["numeric_cols"]}
         df_tbl.rename(columns=rename_dict, inplace=True)
         weekly_df_list.append(df_tbl)
 
