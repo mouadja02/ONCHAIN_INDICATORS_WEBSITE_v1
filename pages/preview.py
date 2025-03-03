@@ -55,37 +55,44 @@ selected_indicators = st.sidebar.multiselect(
 if not selected_indicators:
     st.warning("Veuillez sélectionner au moins un indicateur.")
 else:
-    # On inclut la colonne du prix + les indicateurs choisis
+    # Include the price column plus the selected indicators
     cols_for_corr = [price_col] + selected_indicators
-    corr_data = df[cols_for_corr].corr()  # matrice de corrélation (Pearson par défaut)
+    corr_data = df[cols_for_corr].corr()  # Pearson correlation matrix
 
     st.write("### Matrice de corrélation")
     st.dataframe(corr_data)
 
-    # -----------------------------------------------------------------------------
-    # 5. Visualisation - heatmap matplotlib
-    # -----------------------------------------------------------------------------
-    fig, ax = plt.subplots(figsize=(6, 6))
-    # Display the image with the same color mapping and limits
+    # Determine figure size based on number of features
+    num_features = len(cols_for_corr)
+    fig_width = max(8, num_features * 0.8)
+    fig_height = max(6, num_features * 0.8)
+    fig, ax = plt.subplots(figsize=(fig_width, fig_height))
+    
+    # Set dark background (like in the seaborn version)
+    fig.patch.set_facecolor("black")
+    ax.set_facecolor("black")
+    
+    # Display the correlation matrix using imshow with similar parameters as sns.heatmap
     im = ax.imshow(corr_data, cmap="RdBu_r", vmin=-1, vmax=1, aspect="equal")
     
+    # Set ticks with white labels
     ax.set_xticks(np.arange(len(cols_for_corr)))
     ax.set_yticks(np.arange(len(cols_for_corr)))
-    ax.set_xticklabels(cols_for_corr, rotation=45, ha="right")
-    ax.set_yticklabels(cols_for_corr)
-
+    ax.set_xticklabels(cols_for_corr, rotation=45, ha="right", color="white")
+    ax.set_yticklabels(cols_for_corr, color="white")
+    
+    # Annotate each cell with the correlation value (formatted to 2 decimals)
     for i in range(len(cols_for_corr)):
         for j in range(len(cols_for_corr)):
-            text = ax.text(
-                j, i,
-                f"{corr_data.iloc[i, j]:.2f}",
-                ha="center",
-                va="center",
-                color="white" if abs(corr_data.iloc[i, j]) > 0.5 else "black"
-            )
-
+            ax.text(j, i, f"{corr_data.iloc[i, j]:.2f}",
+                    ha="center", va="center", color="white")
+    
+    # Add colorbar with a white label
     cbar = plt.colorbar(im, ax=ax, shrink=0.75)
     cbar.set_label("Correlation", color="white")
+    
+    # Set title in white
+    ax.set_title("Correlation Matrix of On-chain Features", color="white")
+    
     fig.tight_layout()
-
     st.pyplot(fig)
