@@ -100,16 +100,16 @@ with st.sidebar:
 # 7) BTC PRICE MOVEMENT QUERY
 ######################################
 btc_movement_query = f"""
-    SELECT DATE, AVG_PRICE, PRICE_MOVEMENT_STATE 
+    SELECT WEEK_START, AVG_PRICE, PRICE_MOVEMENT_STATE 
     FROM BTC_DATA.DATA.BTC_PRICE_MOVEMENT_WEEKLY
     WHERE AVG_PRICE IS NOT NULL
-      AND DATE >= '{selected_start_date}'
+      AND WEEK_START >= '{selected_start_date}'
 """
 
 if selected_end_date:
-    btc_movement_query += f" AND DATE <= '{selected_end_date}'"
+    btc_movement_query += f" AND WEEK_START <= '{selected_end_date}'"
 
-btc_movement_query += " ORDER BY DATE"
+btc_movement_query += " ORDER BY WEEK_START"
 
 df_btc_movement = session.sql(btc_movement_query).to_pandas()
 
