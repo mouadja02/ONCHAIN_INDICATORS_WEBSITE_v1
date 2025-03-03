@@ -601,7 +601,7 @@ TABLE_DICT = {
     },
     "EXCHANGE_FLOW": {
          "table_name": "BTC_DATA.DATA.EXCHANGE_FLOW",
-         "date_col": "DAY",
+         "date_col": "DATE",
          "numeric_cols": ["INFLOW", "OUTFLOW", "NETFLOW"]
     },
     "HOLDER_REALIZED_PRICES": {
@@ -636,12 +636,12 @@ TABLE_DICT = {
     },
     "SOPR_WITH_HOLDER_TYPES": {
          "table_name": "BTC_DATA.DATA.SOPR_WITH_HOLDER_TYPES",
-         "date_col": "SALE_DATE",
+         "date_col": "DATE",
          "numeric_cols": ["OVERALL_SOPR", "STH_SOPR", "LTH_SOPR"]
     },
     "TX_COUNT": {
          "table_name": "BTC_DATA.DATA.TX_COUNT",
-         "date_col": "BLOCK_TIMESTAMP",
+         "date_col": "DATE",
          "numeric_cols": ["TX_COUNT"]
     },
     "TX_VOLUME": {
