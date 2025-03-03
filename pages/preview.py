@@ -100,16 +100,16 @@ with st.sidebar:
 # 7) BTC PRICE MOVEMENT QUERY
 ######################################
 btc_movement_query = f"""
-    SELECT WEEK_START, AVG_PRICE, PRICE_MOVEMENT_STATE 
+    SELECT DATE, AVG_PRICE, PRICE_MOVEMENT_STATE 
     FROM BTC_DATA.DATA.BTC_PRICE_MOVEMENT_WEEKLY
     WHERE AVG_PRICE IS NOT NULL
-      AND WEEK_START >= '{selected_start_date}'
+      AND DATE >= '{selected_start_date}'
 """
 
 if selected_end_date:
-    btc_movement_query += f" AND WEEK_START <= '{selected_end_date}'"
+    btc_movement_query += f" AND DATE <= '{selected_end_date}'"
 
-btc_movement_query += " ORDER BY WEEK_START"
+btc_movement_query += " ORDER BY DATE"
 
 df_btc_movement = session.sql(btc_movement_query).to_pandas()
 
@@ -132,7 +132,7 @@ if show_btc_price:
     if chart_type_price == "Line":
         fig.add_trace(
             go.Scatter(
-                x=df_btc_movement["WEEK_START"],
+                x=df_btc_movement["DATE"],
                 y=df_btc_movement["AVG_PRICE"],
                 mode="lines",
                 name="BTC Price (USD)",
@@ -143,7 +143,7 @@ if show_btc_price:
     else:
         fig.add_trace(
             go.Bar(
-                x=df_btc_movement["WEEK_START"],
+                x=df_btc_movement["DATE"],
                 y=df_btc_movement["AVG_PRICE"],
                 name="BTC Price (USD)",
                 marker_color="#3498DB"
@@ -159,7 +159,7 @@ if show_movement_scatter:
         if not state_data.empty:
             fig.add_trace(
                 go.Scatter(
-                    x=state_data["WEEK_START"],
+                    x=state_data["DATE"],
                     y=state_data["AVG_PRICE"],
                     mode="markers",
                     marker=dict(color=state_color_label[state]["color"], size=6),
@@ -581,7 +581,7 @@ st.pyplot(fig)
 TABLE_DICT = {
     "BTC_PRICE_MOVEMENT": {
          "table_name": "BTC_DATA.DATA.BTC_PRICE_MOVEMENT_WEEKLY",
-         "date_col": "WEEK_START",
+         "date_col": "DATE",
          "numeric_cols": ["AVG_PRICE", "PRICE_MOVEMENT_STATE"]
     },
     "ACTIVE_ADDRESSES": {
