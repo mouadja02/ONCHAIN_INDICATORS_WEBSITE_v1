@@ -229,6 +229,7 @@ elif candle_span == "Monthly":
 
 # Build the query to aggregate open, high, low, close for each period
 candle_query = f"""
+CREATE OR REPLACE TABLE BTC_CANDLE_CHART AS
 WITH cte AS (
     SELECT 
         {period_expr} AS period,
