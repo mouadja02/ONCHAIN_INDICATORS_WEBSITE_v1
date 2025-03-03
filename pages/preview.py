@@ -659,17 +659,7 @@ with st.sidebar:
         default=list(TABLE_DICT.keys())[:3],
         help="Choose the on-chain tables you want to analyze."
     )
-    
-    # Date range: Start and optional End date (with unique keys)
-    default_start_date = datetime.date(2015, 1, 1)
-    start_date = st.date_input("Start Date", value=default_start_date, key="corr_start_date")
-    
-    activate_end_date = st.checkbox("Activate End Date", value=False, key="corr_activate_end")
-    if activate_end_date:
-        default_end_date = datetime.date.today()
-        end_date = st.date_input("End Date", value=default_end_date, key="corr_end_date")
-    else:
-        end_date = None
+
 
     # Build the union of available features (with table prefix)
     available_features = []
