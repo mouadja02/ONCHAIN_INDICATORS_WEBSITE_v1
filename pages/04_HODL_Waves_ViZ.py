@@ -36,7 +36,7 @@ df_filtered = df[df["AGE_BUCKET"].isin(selected_age_buckets)]
 # Plotting with Plotly
 fig = px.area(
     df_filtered,
-    x="SNAPSHOT_DATE",
+    x="DATE",
     y="PERCENT_SUPPLY",
     color="AGE_BUCKET",
     title="Bitcoin HODL Waves Over Time (Before Today)",
