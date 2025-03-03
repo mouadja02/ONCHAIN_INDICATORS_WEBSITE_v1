@@ -639,11 +639,6 @@ TABLE_DICT = {
          "date_col": "DATE",
          "numeric_cols": ["OVERALL_SOPR", "STH_SOPR", "LTH_SOPR"]
     },
-    "TX_COUNT": {
-         "table_name": "BTC_DATA.DATA.TX_COUNT",
-         "date_col": "DATE",
-         "numeric_cols": ["TX_COUNT"]
-    },
     "TX_VOLUME": {
          "table_name": "BTC_DATA.DATA.TX_VOLUME",
          "date_col": "DATE",
