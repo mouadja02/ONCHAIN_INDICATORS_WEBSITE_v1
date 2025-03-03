@@ -31,9 +31,6 @@ def load_data_from_snowflake():
 # -----------------------------------------------------------------------------
 st.title("Correlation Dashboard - BTC Price Movement & Indicators")
 
-@st.cache_data 
-def load_data():
-    return load_data_from_snowflake()
 
 df = load_data()
 
