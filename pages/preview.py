@@ -302,6 +302,7 @@ st.download_button(
 st.title("Correlation Matrix of On-chain Features")
 
 
+
 ######################################
 # Table Configurations
 ######################################
@@ -433,11 +434,11 @@ df_list = []
 for tbl in selected_tables:
     tbl_info = TABLE_DICT[tbl]
     date_col = tbl_info["date_col"]
-    # Only query numeric columns that are in the selected features (they are in the format "TABLE:column")
+    # Only query numeric columns that are in the selected features (formatted as "TABLE:column")
     table_features = {f"{tbl}:{col}" for col in tbl_info["numeric_cols"]}
     features_to_query = table_features.intersection(set(selected_features))
     if not features_to_query:
-        continue  # Skip table if no feature is selected from it.
+        continue  # Skip table if no feature is selected.
     # Get raw column names from the selected features
     raw_cols = [feat.split(":", 1)[1] for feat in features_to_query]
     cols_for_query = ", ".join(raw_cols)
@@ -452,7 +453,7 @@ for tbl in selected_tables:
         query += f" AND CAST({date_col} AS DATE) <= '{end_date}'\n"
     query += "ORDER BY DATE"
     df = session.sql(query).to_pandas()
-    # Rename raw columns to include the table prefix (so they match the format "TABLE:column")
+    # Rename raw columns to include the table prefix (e.g. "TABLE:column")
     rename_dict = {col: f"{tbl}:{col}" for col in raw_cols}
     df.rename(columns=rename_dict, inplace=True)
     df_list.append(df)
@@ -477,21 +478,22 @@ if apply_ema:
             merged_df[feature] = merged_df[ema_col]
             merged_df.drop(columns=[ema_col], inplace=True)
 
-# Subset to only the selected features for correlation
-daily_corr_df = merged_df[[col for col in merged_df.columns if col in selected_features]]
+# ----- DAILY CORRELATION -----
+# For daily correlation, we want BTC price (AVG_PRICE) by default.
+daily_features = [col for col in selected_features if col != "BTC_PRICE_MOVEMENT:PRICE_MOVEMENT_STATE"]
+if "BTC_PRICE_MOVEMENT:AVG_PRICE" not in daily_features:
+    daily_features.append("BTC_PRICE_MOVEMENT:AVG_PRICE")
 
-# Compute and plot daily correlation matrix
+daily_corr_df = merged_df[[col for col in merged_df.columns if col in daily_features]]
 daily_corr_matrix = daily_corr_df.corr(method='pearson')
 
 st.subheader("Daily Correlation Matrix Heatmap (Selected Features)")
-
 num_features = len(daily_corr_matrix.columns)
 fig_width = max(8, num_features * 0.8)
 fig_height = max(6, num_features * 0.8)
 fig, ax = plt.subplots(figsize=(fig_width, fig_height))
 fig.patch.set_facecolor("black")
 ax.set_facecolor("black")
-
 sns.heatmap(
     daily_corr_matrix,
     annot=True,
@@ -506,7 +508,6 @@ sns.heatmap(
 ax.set_title("Correlation Matrix of Selected On-chain Features (Daily)", color="white")
 plt.xticks(rotation=45, ha="right", color="white")
 plt.yticks(rotation=0, color="white")
-
 st.pyplot(fig)
 
 ####################################################################################
@@ -514,11 +515,10 @@ st.pyplot(fig)
 ####################################################################################
 st.subheader("Weekly Aggregated Correlation: BTC Price Movement & Indicators Movement")
 
-# Function to query weekly aggregated data for a given table (using AVG aggregation)
+# Helper function to query weekly aggregated data for a given table (using AVG aggregation)
 def get_weekly_data(tbl_info, start_date, end_date):
     date_col = tbl_info["date_col"]
     numeric_cols = tbl_info["numeric_cols"]
-    # Build aggregation for each numeric column using AVG
     agg_cols = ", ".join([f"AVG({col}) AS {col}" for col in numeric_cols])
     query = f"""
         WITH weekly_data AS (
@@ -548,7 +548,6 @@ def get_weekly_data(tbl_info, start_date, end_date):
     return session.sql(query).to_pandas()
 
 weekly_df_list = []
-
 for tbl in selected_tables:
     tbl_info = TABLE_DICT[tbl]
     if tbl == "BTC_PRICE_MOVEMENT":
@@ -596,7 +595,7 @@ for tbl in selected_tables:
         ORDER BY week_start;
         """
         df_btc_weekly = session.sql(btc_price_query).to_pandas()
-        # Rename columns to include table prefix for consistency
+        # Rename columns so they include the table prefix
         df_btc_weekly.rename(columns={
             "avg_price": "BTC_PRICE_MOVEMENT:AVG_PRICE",
             "price_movement_state": "BTC_PRICE_MOVEMENT:PRICE_MOVEMENT_STATE"
@@ -604,7 +603,6 @@ for tbl in selected_tables:
         weekly_df_list.append(df_btc_weekly)
     else:
         df_tbl = get_weekly_data(tbl_info, start_date, end_date)
-        # Rename numeric columns with table prefix
         rename_dict = {col: f"{tbl}:{col}" for col in tbl_info["numeric_cols"]}
         df_tbl.rename(columns=rename_dict, inplace=True)
         weekly_df_list.append(df_tbl)
@@ -629,34 +627,14 @@ if apply_ema:
             weekly_merged_df[feature] = weekly_merged_df[ema_col]
             weekly_merged_df.drop(columns=[ema_col], inplace=True)
 
-# Subset to only the selected features for weekly correlation
-weekly_corr_df = weekly_merged_df[[col for col in weekly_merged_df.columns if col in selected_features]]
+# ----- WEEKLY CORRELATION -----
+# For weekly correlation, we want BTC price movement state by default.
+weekly_features = [col for col in selected_features if col != "BTC_PRICE_MOVEMENT:AVG_PRICE"]
+if "BTC_PRICE_MOVEMENT:PRICE_MOVEMENT_STATE" not in weekly_features:
+    weekly_features.append("BTC_PRICE_MOVEMENT:PRICE_MOVEMENT_STATE")
 
-# Compute correlation matrix on weekly aggregated data
+weekly_corr_df = weekly_merged_df[[col for col in weekly_merged_df.columns if col in weekly_features]]
 weekly_corr_matrix = weekly_corr_df.corr(method='pearson')
 
 st.subheader("Weekly Aggregated Correlation Matrix Heatmap (Selected Features)")
-
-num_features = len(weekly_corr_matrix.columns)
-fig_width = max(8, num_features * 0.8)
-fig_height = max(6, num_features * 0.8)
-fig, ax = plt.subplots(figsize=(fig_width, fig_height))
-fig.patch.set_facecolor("black")
-ax.set_facecolor("black")
-
-sns.heatmap(
-    weekly_corr_matrix,
-    annot=True,
-    cmap="RdBu_r",
-    vmin=-1,
-    vmax=1,
-    square=True,
-    ax=ax,
-    fmt=".2f",
-    cbar_kws={'shrink': 0.75, 'label': 'Correlation'}
-)
-ax.set_title("Correlation Matrix of Selected On-chain Features (Weekly Aggregated)", color="white")
-plt.xticks(rotation=45, ha="right", color="white")
-plt.yticks(rotation=0, color="white")
-
-st.pyplot(fig)
+num_features = len(w
