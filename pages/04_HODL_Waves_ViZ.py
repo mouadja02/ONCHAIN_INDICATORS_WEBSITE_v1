@@ -13,7 +13,7 @@ session = cx.session()
 query = """
     SELECT DATE, AGE_BUCKET, PERCENT_SUPPLY
     FROM HODL_Waves
-    ORDER BY SNAPSHOT_DATE ASC
+    ORDER BY DATE ASC
 """
 df = session.sql(query).to_pandas()
 
