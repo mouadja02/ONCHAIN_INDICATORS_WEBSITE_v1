@@ -575,11 +575,7 @@ plt.yticks(rotation=0, color="white")
 st.pyplot(fig)
 
 ####################################################################################
-import datetime
-import pandas as pd
-import matplotlib.pyplot as plt
-import seaborn as sns
-import streamlit as st
+
 
 # Define the on-chain tables with their details:
 TABLE_DICT = {
