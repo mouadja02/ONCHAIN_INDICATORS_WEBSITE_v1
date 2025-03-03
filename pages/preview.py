@@ -552,7 +552,7 @@ for tbl in selected_tables:
     if tbl == "BTC_PRICE_MOVEMENT":
         # Use the provided BTC price movement weekly query
         btc_price_query = f"""
-       SELECT WEEK_START, AVG_PRICE, PRICE_MOUVEMENT_STATE FROM BTC_DATA.DATA.BTC_PRICE_MOVEMENT_WEEKLY;
+       SELECT WEEK_START, AVG_PRICE, PRICE_MOVEMENT_STATE FROM BTC_DATA.DATA.BTC_PRICE_MOVEMENT_WEEKLY;
         """
         df_btc_weekly = session.sql(btc_price_query).to_pandas()
         # Rename columns so they include the table prefix
