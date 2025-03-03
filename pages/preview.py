@@ -39,8 +39,6 @@ price_col = "PRICE_MOVEMENT_STATE"
 # -----------------------------------------------------------------------------
 # 3. Barre latérale : sélection des indicateurs
 # -----------------------------------------------------------------------------
-# Pour simplifier, on va extraire toutes les colonnes qui se terminent par "_STATE"
-# sauf PRICE_MOVEMENT_STATE lui-même, afin de construire une liste d’indicateurs.
 all_state_cols = [col for col in df.columns 
                   if col.endswith("_STATE") and col != price_col]
 
@@ -68,15 +66,13 @@ else:
     # 5. Visualisation - heatmap matplotlib
     # -----------------------------------------------------------------------------
     fig, ax = plt.subplots(figsize=(6, 6))
-    im = ax.imshow(corr_data, cmap="viridis", aspect="auto")
+    im = ax.imshow(corr_data, cmap="RdBu_r", aspect="auto")
 
-    # On ajoute les labels (colonnes) en abscisse et en ordonnée
     ax.set_xticks(np.arange(len(cols_for_corr)))
     ax.set_yticks(np.arange(len(cols_for_corr)))
     ax.set_xticklabels(cols_for_corr, rotation=45, ha="right")
     ax.set_yticklabels(cols_for_corr)
 
-    # Optionnel : ajouter les valeurs de corrélation sur le heatmap
     for i in range(len(cols_for_corr)):
         for j in range(len(cols_for_corr)):
             text = ax.text(
@@ -87,7 +83,6 @@ else:
                 color="white" if abs(corr_data.iloc[i, j]) > 0.5 else "black"
             )
 
-    # Ajuster les marges
     fig.tight_layout()
 
     st.pyplot(fig)
