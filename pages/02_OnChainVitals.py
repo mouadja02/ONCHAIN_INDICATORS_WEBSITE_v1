@@ -61,11 +61,6 @@ TABLE_DICT = {
         "date_col": "DATE", 
         "numeric_cols": ["ACTIVE_ADDRESSES"]
     },
-    "ADDRESSES PROFIT LOSS PERCENT": {
-        "table_name": "BTC_DATA.DATA.ADDRESSES_PROFIT_LOSS_PERCENT",
-        "date_col": "sale_date", 
-        "numeric_cols": ["PERCENT_PROFIT", "PERCENT_LOSS"]
-    },
     "REALIZED CAP AND PRICE": {
         "table_name": "BTC_DATA.DATA.BTC_REALIZED_CAP_AND_PRICE",
         "date_col": "DATE",
@@ -82,7 +77,7 @@ TABLE_DICT = {
     },
     "EXCHANGE_FLOW": {
         "table_name": "BTC_DATA.DATA.EXCHANGE_FLOW",
-        "date_col": "DAY",
+        "date_col": "DATE",
         "numeric_cols": ["INFLOW", "OUTFLOW", "NETFLOW"]
     },
     "HOLDER REALIZED PRICES": {
@@ -112,12 +107,12 @@ TABLE_DICT = {
     },
     "SOPR": {
         "table_name": "BTC_DATA.DATA.SOPR",
-        "date_col": "spent_date",
+        "date_col": "DATE",
         "numeric_cols": ["SOPR"]
     },
     "SOPR WITH HOLDER TYPES": {
         "table_name": "BTC_DATA.DATA.SOPR_WITH_HOLDER_TYPES",
-        "date_col": "sale_date",
+        "date_col": "DATE",
         "numeric_cols": ["OVERALL_SOPR", "STH_SOPR", "LTH_SOPR"]
     },
     "STOCK TO FLOW": {
@@ -127,7 +122,7 @@ TABLE_DICT = {
     },
     "TX COUNT": {
         "table_name": "BTC_DATA.DATA.TX_COUNT",
-        "date_col": "BLOCK_TIMESTAMP",
+        "date_col": "DATE",
         "numeric_cols": ["TX_COUNT"]
     },
     "TX VOLUME": {
