@@ -66,8 +66,9 @@ else:
     # 5. Visualisation - heatmap matplotlib
     # -----------------------------------------------------------------------------
     fig, ax = plt.subplots(figsize=(6, 6))
-    im = ax.imshow(corr_data, cmap="coolwarm", aspect="auto")
-
+    # Display the image with the same color mapping and limits
+    im = ax.imshow(corr_data, cmap="RdBu_r", vmin=-1, vmax=1, aspect="equal")
+    
     ax.set_xticks(np.arange(len(cols_for_corr)))
     ax.set_yticks(np.arange(len(cols_for_corr)))
     ax.set_xticklabels(cols_for_corr, rotation=45, ha="right")
@@ -83,6 +84,8 @@ else:
                 color="white" if abs(corr_data.iloc[i, j]) > 0.5 else "black"
             )
 
+    cbar = plt.colorbar(im, ax=ax, shrink=0.75)
+    cbar.set_label("Correlation", color="white")
     fig.tight_layout()
 
     st.pyplot(fig)
