@@ -549,7 +549,7 @@ def get_weekly_data(tbl_info, start_date, end_date):
 weekly_df_list = []
 for tbl in selected_tables:
     tbl_info = TABLE_DICT[tbl]
-    if weekly_df_list == []:
+    if tbl == "BTC_PRICE_MOVEMENT":
         # Use the provided BTC price movement weekly query
         btc_price_query = f"""
        SELECT * FROM BTC_DATA.DATA.BTC_PRICE_MOVEMENT_WEEKLY;
