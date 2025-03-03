@@ -100,37 +100,27 @@ with st.sidebar:
 # 7) BTC PRICE MOVEMENT QUERY
 ######################################
 btc_movement_query = f"""
-    WITH price_changes AS (
-        SELECT 
-            CAST(DATE AS DATE) AS DATE,
-            BTC_PRICE_USD,
-            LAG(BTC_PRICE_USD) OVER (ORDER BY DATE) AS previous_price
-        FROM {BTC_PRICE_TABLE}
-    )
-    SELECT 
-        DATE,
-        BTC_PRICE_USD,
-        CASE 
-            WHEN previous_price IS NULL THEN NULL  
-            WHEN BTC_PRICE_USD > previous_price * (1 + {movement_threshold} / 100) THEN 1  
-            WHEN BTC_PRICE_USD < previous_price * (1 - {movement_threshold} / 100) THEN -1  
-            ELSE 0  
-        END AS PRICE_MOVEMENT
-    FROM price_changes
-    WHERE BTC_PRICE_USD IS NOT NULL
-      AND DATE >= '{selected_start_date}'
+    SELECT WEEK_START, AVG_PRICE, PRICE_MOVEMENT_STATE 
+    FROM BTC_DATA.DATA.BTC_PRICE_MOVEMENT_WEEKLY
+    WHERE AVG_PRICE IS NOT NULL
+      AND WEEK_START >= '{selected_start_date}'
 """
 
 if selected_end_date:
-    btc_movement_query += f" AND DATE <= '{selected_end_date}'"
+    btc_movement_query += f" AND WEEK_START <= '{selected_end_date}'"
 
-btc_movement_query += " ORDER BY DATE"
+btc_movement_query += " ORDER BY WEEK_START"
 
 df_btc_movement = session.sql(btc_movement_query).to_pandas()
 
-# Map movement states to colors
-color_map = {1: "#2ECC71", 0: "#F1C40F", -1: "#E74C3C"}  
-df_btc_movement["Color"] = df_btc_movement["PRICE_MOVEMENT"].map(color_map)
+# Define mapping for five distinct states with colors and labels:
+state_color_label = {
+    2: {"color": "#ad0c00", "label": "Increase significantly"},
+    1: {"color": "#ff6f00", "label": "Moderate increase"},
+    0: {"color": "#fffb00", "label": "Unchanged"},
+    -1: {"color": "#55ff00", "label": "Moderate decrease"},
+    -2: {"color": "#006e07", "label": "Decrease significantly"}
+}
 
 ######################################
 # 8) MAIN PLOT (BTC Price + Scatter)
@@ -142,8 +132,8 @@ if show_btc_price:
     if chart_type_price == "Line":
         fig.add_trace(
             go.Scatter(
-                x=df_btc_movement["DATE"],
-                y=df_btc_movement["BTC_PRICE_USD"],
+                x=df_btc_movement["WEEK_START"],
+                y=df_btc_movement["AVG_PRICE"],
                 mode="lines",
                 name="BTC Price (USD)",
                 line=dict(color="#3498DB")
@@ -153,26 +143,30 @@ if show_btc_price:
     else:
         fig.add_trace(
             go.Bar(
-                x=df_btc_movement["DATE"],
-                y=df_btc_movement["BTC_PRICE_USD"],
+                x=df_btc_movement["WEEK_START"],
+                y=df_btc_movement["AVG_PRICE"],
                 name="BTC Price (USD)",
                 marker_color="#3498DB"
             ),
             secondary_y=True
         )
 
-# Scatter plot for BTC Price Movement States
+# Scatter plot for BTC Price Movement States:
+# Loop through each state to add a separate scatter trace with its unique color.
 if show_movement_scatter:
-    fig.add_trace(
-        go.Scatter(
-            x=df_btc_movement["DATE"],
-            y=df_btc_movement["BTC_PRICE_USD"],
-            mode="markers",
-            marker=dict(color=df_btc_movement["Color"], size=6),
-            name="BTC Price Movement"
-        ),
-        secondary_y=True
-    )
+    for state in sorted(state_color_label.keys(), reverse=True):  # ordering: 2,1,0,-1,-2
+        state_data = df_btc_movement[df_btc_movement["PRICE_MOVEMENT_STATE"] == state]
+        if not state_data.empty:
+            fig.add_trace(
+                go.Scatter(
+                    x=state_data["WEEK_START"],
+                    y=state_data["AVG_PRICE"],
+                    mode="markers",
+                    marker=dict(color=state_color_label[state]["color"], size=6),
+                    name=state_color_label[state]["label"]
+                ),
+                secondary_y=True
+            )
 
 # Update Layout
 fig.update_layout(
@@ -197,14 +191,6 @@ fig.update_yaxes(
 # Display Plot
 st.plotly_chart(fig, use_container_width=True)
 
-
-st.markdown("""
-**Legend:**  
-🟢 **Green (🔼 Increase, > Threshold for unchanged state)**  
-🟡 **Yellow (⏸ Unchanged, within ± Threshold for unchanged state)**  
-🔴 **Red (🔽 Decrease, > Threshold for unchanged state)**
-""", unsafe_allow_html=True)
-
 ######################################
 # 9) BTC Candlestick Chart with Dynamic Span
 ######################################
@@ -213,13 +199,10 @@ st.header("BTC Candlestick Chart")
 # Sidebar selection for the candle chart span
 candle_span = st.selectbox("Select Candle Chart Span", ["Daily", "Weekly", "Monthly"], index=0)
 
-# Map the chosen span to the corresponding Snowflake date_trunc interval
 # Determine the period expression based on the selected span
 if candle_span == "Daily":
-    span_interval = "day"
     period_expr = f"DATE_TRUNC('day', {BTC_PRICE_DATE_COL})"
 elif candle_span == "Weekly":
-    span_interval = "week"
     # For weekly grouping from Monday to Sunday, calculate Monday as the period start.
     # In Snowflake, DAYOFWEEK returns 1 for Sunday, 2 for Monday, ..., 7 for Saturday.
     # For a Sunday record, subtract 6 days; otherwise, subtract (DAYOFWEEK - 2) days.
@@ -228,24 +211,20 @@ elif candle_span == "Weekly":
         f"THEN -6 ELSE 2 - DAYOFWEEK({BTC_PRICE_DATE_COL}) END, {BTC_PRICE_DATE_COL})"
     )
 elif candle_span == "Monthly":
-    span_interval = "month"
     period_expr = f"DATE_TRUNC('month', {BTC_PRICE_DATE_COL})"
 
 # Build the query to aggregate open, high, low, close for each period
 candle_query = f"""
 WITH cte AS (
     SELECT 
-        DATE_TRUNC('{span_interval}', {BTC_PRICE_DATE_COL}) AS period,
         {period_expr} AS period,
         {BTC_PRICE_DATE_COL} AS date,
         {BTC_PRICE_VALUE_COL} AS price,
         ROW_NUMBER() OVER (
-            PARTITION BY DATE_TRUNC('{span_interval}', {BTC_PRICE_DATE_COL})
             PARTITION BY {period_expr}
             ORDER BY {BTC_PRICE_DATE_COL} ASC
         ) AS rn_asc,
         ROW_NUMBER() OVER (
-            PARTITION BY DATE_TRUNC('{span_interval}', {BTC_PRICE_DATE_COL})
             PARTITION BY {period_expr}
             ORDER BY {BTC_PRICE_DATE_COL} DESC
         ) AS rn_desc
@@ -298,7 +277,6 @@ fig_candle.update_yaxes(
     gridcolor="#4f5b66"
 )
 
-
 fig_candle.update_layout(
     title=f"BTC Candlestick Chart ({candle_span} Span)",
     xaxis_title="Date",
@@ -333,11 +311,6 @@ TABLE_DICT = {
         "date_col": "DATE", 
         "numeric_cols": ["ACTIVE_ADDRESSES"]
     },
-    "ADDRESSES PROFIT LOSS PERCENT": {
-        "table_name": "BTC_DATA.DATA.ADDRESSES_PROFIT_LOSS_PERCENT",
-        "date_col": "sale_date", 
-        "numeric_cols": ["PERCENT_PROFIT", "PERCENT_LOSS"]
-    },
     "REALIZED CAP AND PRICE": {
         "table_name": "BTC_DATA.DATA.BTC_REALIZED_CAP_AND_PRICE",
         "date_col": "DATE",
@@ -368,7 +341,7 @@ TABLE_DICT = {
     },
     "EXCHANGE_FLOW": {
         "table_name": "BTC_DATA.DATA.EXCHANGE_FLOW",
-        "date_col": "DAY",
+        "date_col": "DATE",
         "numeric_cols": ["INFLOW", "OUTFLOW", "NETFLOW"]
     },
     "HOLDER REALIZED PRICES": {
@@ -408,12 +381,12 @@ TABLE_DICT = {
     },
     "SOPR": {
         "table_name": "BTC_DATA.DATA.SOPR",
-        "date_col": "spent_date",
+        "date_col": "DATE",
         "numeric_cols": ["SOPR"]
     },
     "SOPR WITH HOLDER TYPES": {
         "table_name": "BTC_DATA.DATA.SOPR_WITH_HOLDER_TYPES",
-        "date_col": "sale_date",
+        "date_col": "DATE",
         "numeric_cols": ["OVERALL_SOPR", "STH_SOPR", "LTH_SOPR"]
     },
     "STOCK TO FLOW MODEL": {
@@ -423,18 +396,13 @@ TABLE_DICT = {
     },
     "TX COUNT": {
         "table_name": "BTC_DATA.DATA.TX_COUNT",
-        "date_col": "BLOCK_TIMESTAMP",
+        "date_col": "DATE",
         "numeric_cols": ["TX_COUNT"]
     },
     "TX VOLUME": {
         "table_name": "BTC_DATA.DATA.TX_VOLUME",
         "date_col": "DATE",
         "numeric_cols": ["DAILY_TX_VOLUME_BTC"]
-    },
-    "UTXO LIFECYCLE": {
-        "table_name": "BTC_DATA.DATA.UTXO_LIFECYCLE",
-        "date_col": "CREATED_TIMESTAMP",
-        "numeric_cols": ["BTC_VALUE"]
     },
     "TX BANDS": {
         "table_name": "BTC_DATA.DATA.TX_BANDS",
@@ -454,7 +422,7 @@ TABLE_DICT = {
 ######################################
 with st.sidebar:
     st.header("Correlation Settings")
-
+    
     # Select tables to include
     selected_tables = st.multiselect(
         "Select tables to include:",
@@ -462,11 +430,11 @@ with st.sidebar:
         default=list(TABLE_DICT.keys())[:3],
         help="Choose the on-chain tables you want to analyze."
     )
-
+    
     # Date range: Start and optional End date (with unique keys)
     default_start_date = datetime.date(2015, 1, 1)
     start_date = st.date_input("Start Date", value=default_start_date, key="corr_start_date")
-
+    
     activate_end_date = st.checkbox("Activate End Date", value=False, key="corr_activate_end")
     if activate_end_date:
         default_end_date = datetime.date.today()
@@ -480,7 +448,7 @@ with st.sidebar:
         tbl_info = TABLE_DICT[tbl]
         for col in tbl_info["numeric_cols"]:
             available_features.append(f"{tbl}:{col}")
-
+    
     # Let the user choose which features (from the selected tables) to include
     selected_features = st.multiselect(
         "Select Features for Correlation:",
@@ -488,7 +456,7 @@ with st.sidebar:
         default=available_features,
         key="selected_features"
     )
-
+    
     # Option to apply EMA on selected features
     apply_ema = st.checkbox("Apply EMA on selected features", value=False, key="apply_ema")
     if apply_ema:
@@ -595,3 +563,70 @@ plt.xticks(rotation=45, ha="right", color="white")
 plt.yticks(rotation=0, color="white")
 
 st.pyplot(fig)
+
+
+"""
+import io
+
+######################################
+# Plot Correlation Heatmap using Matplotlib/Seaborn
+######################################
+st.subheader("Correlation Matrix Heatmap")
+
+num_features = len(corr_matrix.columns)
+fig_width = max(8, num_features * 0.8)
+fig_height = max(6, num_features * 0.8)
+fig, ax = plt.subplots(figsize=(fig_width, fig_height))
+
+# Paramètres pour le thème sombre (affiché dans l'app)
+fig.patch.set_facecolor("black")
+ax.set_facecolor("black")
+sns.heatmap(
+    corr_matrix,
+    annot=True,
+    cmap="RdBu_r",
+    vmin=-1,
+    vmax=1,
+    square=True,
+    ax=ax,
+    fmt=".2f",
+    cbar_kws={'shrink': 0.75, 'label': 'Correlation'}
+)
+ax.set_title("Correlation Matrix of On-chain Features", color="white")
+plt.xticks(rotation=45, ha="right", color="white")
+plt.yticks(rotation=0, color="white")
+
+st.plotly_chart(fig, use_container_width=True)  # ou st.pyplot(fig) selon votre préférence
+
+######################################
+# Option to Save Plot on White Background
+######################################
+if st.button("Save Correlation Plot (White Background)"):
+    # Créer une nouvelle figure identique mais avec fond blanc
+    fig_save, ax_save = plt.subplots(figsize=(fig_width, fig_height))
+    fig_save.patch.set_facecolor("white")
+    ax_save.set_facecolor("white")
+    
+    sns.heatmap(
+        corr_matrix,
+        annot=True,
+        cmap="RdBu_r",
+        vmin=-1,
+        vmax=1,
+        square=True,
+        ax=ax_save,
+        fmt=".2f",
+        cbar_kws={'shrink': 0.75, 'label': 'Correlation'}
+    )
+    ax_save.set_title("Correlation Matrix of On-chain Features", color="black")
+    plt.xticks(rotation=45, ha="right", color="black")
+    plt.yticks(rotation=0, color="black")
+    
+    # Enregistrer la figure dans un buffer
+    buf = io.BytesIO()
+    fig_save.savefig(buf, format="png", bbox_inches="tight", facecolor="white")
+    buf.seek(0)
+    st.download_button("Download Plot as PNG", data=buf, file_name="correlation_heatmap.png", mime="image/png")
+    
+    plt.close(fig_save)
+"""
