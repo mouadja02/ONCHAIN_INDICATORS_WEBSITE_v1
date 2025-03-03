@@ -9,21 +9,14 @@ import snowflake.connector
 # -----------------------------------------------------------------------------
 def load_data_from_snowflake():
     # Remplacez par vos propres identifiants
-    conn = snowflake.connector.connect(
-        user="YOUR_USER",
-        password="YOUR_PASSWORD",
-        account="YOUR_ACCOUNT"
-    )
-    cur = conn.cursor()
+    cx = st.connection("snowflake")
+    session = cx.session()
     query = """
         SELECT * 
         FROM BTC_DATA.DATA.BTC_ALL_INDICATORS_STATES
         ORDER BY date_week
     """
-    cur.execute(query)
-    df = cur.fetch_pandas_all()
-    cur.close()
-    conn.close()
+    df = session.sql(query).to_pandas()
     return df
 
 # -----------------------------------------------------------------------------
@@ -31,6 +24,9 @@ def load_data_from_snowflake():
 # -----------------------------------------------------------------------------
 st.title("Correlation Dashboard - BTC Price Movement & Indicators")
 
+@st.cache_data  # Cache Streamlit pour éviter de recharger à chaque rafraîchissement
+def load_data():
+    return load_data_from_snowflake()
 
 df = load_data()
 
@@ -43,7 +39,8 @@ price_col = "PRICE_MOVEMENT_STATE"
 # -----------------------------------------------------------------------------
 # 3. Barre latérale : sélection des indicateurs
 # -----------------------------------------------------------------------------
-
+# Pour simplifier, on va extraire toutes les colonnes qui se terminent par "_STATE"
+# sauf PRICE_MOVEMENT_STATE lui-même, afin de construire une liste d’indicateurs.
 all_state_cols = [col for col in df.columns 
                   if col.endswith("_STATE") and col != price_col]
 
@@ -60,8 +57,10 @@ selected_indicators = st.sidebar.multiselect(
 if not selected_indicators:
     st.warning("Veuillez sélectionner au moins un indicateur.")
 else:
+    # On inclut la colonne du prix + les indicateurs choisis
     cols_for_corr = [price_col] + selected_indicators
-    corr_data = df[cols_for_corr].corr() 
+    corr_data = df[cols_for_corr].corr()  # matrice de corrélation (Pearson par défaut)
+
     st.write("### Matrice de corrélation")
     st.dataframe(corr_data)
 
