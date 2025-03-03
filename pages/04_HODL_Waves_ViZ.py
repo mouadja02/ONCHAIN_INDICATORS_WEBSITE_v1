@@ -18,7 +18,7 @@ query = """
 df = session.sql(query).to_pandas()
 
 # Convert date column to datetime
-df["SNAPSHOT_DATE"] = pd.to_datetime(df["DATE"])
+df["DATE"] = pd.to_datetime(df["DATE"])
 
 # Filter out future dates
 today = pd.to_datetime("today").normalize()  # Get today's date without time
