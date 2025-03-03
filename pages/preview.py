@@ -305,128 +305,75 @@ st.title("Correlation Matrix of On-chain Features")
 ######################################
 # Table Configurations
 ######################################
+# Define the on-chain tables with their details:
 TABLE_DICT = {
-    "ACTIVE ADDRESSES": {
-        "table_name": "BTC_DATA.DATA.ACTIVE_ADDRESSES",
-        "date_col": "DATE", 
-        "numeric_cols": ["ACTIVE_ADDRESSES"]
+    "BTC_PRICE_MOVEMENT": {
+         "table_name": "BTC_DATA.DATA.BTC_PRICE_MOVEMENT_WEEKLY",
+         "date_col": "DATE",
+         "numeric_cols": ["AVG_PRICE", "PRICE_MOVEMENT_STATE"]
     },
-    "ADDRESSES PROFIT LOSS PERCENT": {
-        "table_name": "BTC_DATA.DATA.ADDRESSES_PROFIT_LOSS_PERCENT",
-        "date_col": "sale_date", 
-        "numeric_cols": ["PERCENT_PROFIT", "PERCENT_LOSS"]
+    "ACTIVE_ADDRESSES": {
+         "table_name": "BTC_DATA.DATA.ACTIVE_ADDRESSES",
+         "date_col": "DATE",
+         "numeric_cols": ["ACTIVE_ADDRESSES"]
     },
-    "REALIZED CAP AND PRICE": {
-        "table_name": "BTC_DATA.DATA.BTC_REALIZED_CAP_AND_PRICE",
-        "date_col": "DATE",
-        "numeric_cols": [
-            "REALIZED_CAP_USD",
-            "REALIZED_PRICE_USD",
-            "TOTAL_UNSPENT_BTC"
-        ]
-    },
-    "BTC PRICE": {
-        "table_name": "BTC_DATA.DATA.BTC_PRICE_USD",
-        "date_col": "DATE",
-        "numeric_cols": [
-            "BTC_PRICE_USD",
-        ]
-    },
-    "BTC PRICE MOUVEMENT": {
-        "table_name": "BTC_DATA.DATA.BTC_PRICE_MOVEMENT",
-        "date_col": "DATE",
-        "numeric_cols": [
-            "PRICE_MOVEMENT"
-        ]
+    "BTC_REALIZED_CAP_AND_PRICE": {
+         "table_name": "BTC_DATA.DATA.BTC_REALIZED_CAP_AND_PRICE",
+         "date_col": "DATE",
+         "numeric_cols": ["REALIZED_CAP_USD", "TOTAL_UNSPENT_BTC", "REALIZED_PRICE_USD"]
     },
     "CDD": {
-        "table_name": "BTC_DATA.DATA.CDD",
-        "date_col": "DATE",
-        "numeric_cols": ["CDD_RAW", "CDD_30_DMA", "CDD_90_DMA"]
+         "table_name": "BTC_DATA.DATA.CDD",
+         "date_col": "DATE",
+         "numeric_cols": ["CDD_RAW", "CDD_30_DMA", "CDD_90_DMA"]
     },
     "EXCHANGE_FLOW": {
-        "table_name": "BTC_DATA.DATA.EXCHANGE_FLOW",
-        "date_col": "DAY",
-        "numeric_cols": ["INFLOW", "OUTFLOW", "NETFLOW"]
+         "table_name": "BTC_DATA.DATA.EXCHANGE_FLOW",
+         "date_col": "DATE",
+         "numeric_cols": ["INFLOW", "OUTFLOW", "NETFLOW"]
     },
-    "HOLDER REALIZED PRICES": {
-        "table_name": "BTC_DATA.DATA.HOLDER_REALIZED_PRICES",
-        "date_col": "DATE",
-        "numeric_cols": ["STH_REALIZED_PRICE", "LTH_REALIZED_PRICE"]
+    "HOLDER_REALIZED_PRICES": {
+         "table_name": "BTC_DATA.DATA.HOLDER_REALIZED_PRICES",
+         "date_col": "DATE",
+         "numeric_cols": ["STH_REALIZED_PRICE", "LTH_REALIZED_PRICE"]
     },
     "MVRV": {
-        "table_name": "BTC_DATA.DATA.MVRV",
-        "date_col": "DATE",
-        "numeric_cols": ["MVRV"]
+         "table_name": "BTC_DATA.DATA.MVRV",
+         "date_col": "DATE",
+         "numeric_cols": ["REALIZED_CAP_USD", "TOTAL_UNSPENT_BTC", "MARKET_CAP_USD", "MVRV"]
     },
-    "MVRV WITH HOLDER TYPES": {
-        "table_name": "BTC_DATA.DATA.MVRV_WITH_HOLDER_TYPES",
-        "date_col": "DATE",
-        "numeric_cols": ["OVERALL_MVRV", "STH_MVRV", "LTH_MVRV"]
+    "MVRV_WITH_HOLDER_TYPES": {
+         "table_name": "BTC_DATA.DATA.MVRV_WITH_HOLDER_TYPES",
+         "date_col": "DATE",
+         "numeric_cols": ["OVERALL_MVRV", "STH_MVRV", "LTH_MVRV"]
     },
     "NUPL": {
-        "table_name": "BTC_DATA.DATA.NUPL",
-        "date_col": "DATE",
-        "numeric_cols": ["NUPL", "NUPL_PERCENT"]
+         "table_name": "BTC_DATA.DATA.NUPL",
+         "date_col": "DATE",
+         "numeric_cols": ["MARKET_CAP_USD", "REALIZED_CAP_USD", "NUPL", "NUPL_PERCENT"]
     },
-     "PUELL MULTIPLE": {
-        "table_name": "BTC_DATA.DATA.PUELL_MULTIPLE",
-        "date_col": "DATE",
-        "numeric_cols": [
-            "MINTED_BTC",
-            "DAILY_ISSUANCE_USD",
-            "MA_365_ISSUANCE_USD",
-            "PUELL_MULTIPLE"
-        ]
-    },
-    "REALIZED_CAP_VS_MARKET_CAP": {
-        "table_name": "BTC_DATA.DATA.REALIZED_CAP_VS_MARKET_CAP",
-        "date_col": "DATE",
-        "numeric_cols": ["MARKET_CAP_USD", "REALIZED_CAP_USD"]
+    "PUELL_MULTIPLE": {
+         "table_name": "BTC_DATA.DATA.PUELL_MULTIPLE",
+         "date_col": "DATE",
+         "numeric_cols": ["MINTED_BTC", "DAILY_ISSUANCE_USD", "MA_365_ISSUANCE_USD", "PUELL_MULTIPLE"]
     },
     "SOPR": {
-        "table_name": "BTC_DATA.DATA.SOPR",
-        "date_col": "spent_date",
-        "numeric_cols": ["SOPR"]
+         "table_name": "BTC_DATA.DATA.SOPR",
+         "date_col": "SPENT_DATE",
+         "numeric_cols": ["SOPR"]
     },
-    "SOPR WITH HOLDER TYPES": {
-        "table_name": "BTC_DATA.DATA.SOPR_WITH_HOLDER_TYPES",
-        "date_col": "sale_date",
-        "numeric_cols": ["OVERALL_SOPR", "STH_SOPR", "LTH_SOPR"]
+    "SOPR_WITH_HOLDER_TYPES": {
+         "table_name": "BTC_DATA.DATA.SOPR_WITH_HOLDER_TYPES",
+         "date_col": "DATE",
+         "numeric_cols": ["OVERALL_SOPR", "STH_SOPR", "LTH_SOPR"]
     },
-    "STOCK TO FLOW MODEL": {
-        "table_name": "BTC_DATA.DATA.STOCK_TO_FLOW_MODEL",
-        "date_col": "DATE",
-        "numeric_cols": ["STOCK", "FLOW", "STOCK_TO_FLOW", "MODEL_PRICE"]
-    },
-    "TX COUNT": {
-        "table_name": "BTC_DATA.DATA.TX_COUNT",
-        "date_col": "BLOCK_TIMESTAMP",
-        "numeric_cols": ["TX_COUNT"]
-    },
-    "TX VOLUME": {
-        "table_name": "BTC_DATA.DATA.TX_VOLUME",
-        "date_col": "DATE",
-        "numeric_cols": ["DAILY_TX_VOLUME_BTC"]
-    },
-    "UTXO LIFECYCLE": {
-        "table_name": "BTC_DATA.DATA.UTXO_LIFECYCLE",
-        "date_col": "CREATED_TIMESTAMP",
-        "numeric_cols": ["BTC_VALUE"]
-    },
-    "TX BANDS": {
-        "table_name": "BTC_DATA.DATA.TX_BANDS",
-        "date_col": "TX_DATE",
-        "numeric_cols": [
-            "TX_GT_1_BTC",
-            "TX_GT_10_BTC",
-            "TX_GT_100_BTC",
-            "TX_GT_1000_BTC",
-            "TX_GT_10000_BTC",
-            "TX_GT_100000_BTC"
-            ]
-    },
+    "TX_VOLUME": {
+         "table_name": "BTC_DATA.DATA.TX_VOLUME",
+         "date_col": "DATE",
+         "numeric_cols": ["DAILY_TX_VOLUME_BTC"]
+    }
 }
+
 ######################################
 # Sidebar Controls
 ######################################
@@ -577,74 +524,6 @@ st.pyplot(fig)
 ####################################################################################
 
 
-# Define the on-chain tables with their details:
-TABLE_DICT = {
-    "BTC_PRICE_MOVEMENT": {
-         "table_name": "BTC_DATA.DATA.BTC_PRICE_MOVEMENT_WEEKLY",
-         "date_col": "DATE",
-         "numeric_cols": ["AVG_PRICE", "PRICE_MOVEMENT_STATE"]
-    },
-    "ACTIVE_ADDRESSES": {
-         "table_name": "BTC_DATA.DATA.ACTIVE_ADDRESSES",
-         "date_col": "DATE",
-         "numeric_cols": ["ACTIVE_ADDRESSES"]
-    },
-    "BTC_REALIZED_CAP_AND_PRICE": {
-         "table_name": "BTC_DATA.DATA.BTC_REALIZED_CAP_AND_PRICE",
-         "date_col": "DATE",
-         "numeric_cols": ["REALIZED_CAP_USD", "TOTAL_UNSPENT_BTC", "REALIZED_PRICE_USD"]
-    },
-    "CDD": {
-         "table_name": "BTC_DATA.DATA.CDD",
-         "date_col": "DATE",
-         "numeric_cols": ["CDD_RAW", "CDD_30_DMA", "CDD_90_DMA"]
-    },
-    "EXCHANGE_FLOW": {
-         "table_name": "BTC_DATA.DATA.EXCHANGE_FLOW",
-         "date_col": "DATE",
-         "numeric_cols": ["INFLOW", "OUTFLOW", "NETFLOW"]
-    },
-    "HOLDER_REALIZED_PRICES": {
-         "table_name": "BTC_DATA.DATA.HOLDER_REALIZED_PRICES",
-         "date_col": "DATE",
-         "numeric_cols": ["STH_REALIZED_PRICE", "LTH_REALIZED_PRICE"]
-    },
-    "MVRV": {
-         "table_name": "BTC_DATA.DATA.MVRV",
-         "date_col": "DATE",
-         "numeric_cols": ["REALIZED_CAP_USD", "TOTAL_UNSPENT_BTC", "MARKET_CAP_USD", "MVRV"]
-    },
-    "MVRV_WITH_HOLDER_TYPES": {
-         "table_name": "BTC_DATA.DATA.MVRV_WITH_HOLDER_TYPES",
-         "date_col": "DATE",
-         "numeric_cols": ["OVERALL_MVRV", "STH_MVRV", "LTH_MVRV"]
-    },
-    "NUPL": {
-         "table_name": "BTC_DATA.DATA.NUPL",
-         "date_col": "DATE",
-         "numeric_cols": ["MARKET_CAP_USD", "REALIZED_CAP_USD", "NUPL", "NUPL_PERCENT"]
-    },
-    "PUELL_MULTIPLE": {
-         "table_name": "BTC_DATA.DATA.PUELL_MULTIPLE",
-         "date_col": "DATE",
-         "numeric_cols": ["MINTED_BTC", "DAILY_ISSUANCE_USD", "MA_365_ISSUANCE_USD", "PUELL_MULTIPLE"]
-    },
-    "SOPR": {
-         "table_name": "BTC_DATA.DATA.SOPR",
-         "date_col": "SPENT_DATE",
-         "numeric_cols": ["SOPR"]
-    },
-    "SOPR_WITH_HOLDER_TYPES": {
-         "table_name": "BTC_DATA.DATA.SOPR_WITH_HOLDER_TYPES",
-         "date_col": "DATE",
-         "numeric_cols": ["OVERALL_SOPR", "STH_SOPR", "LTH_SOPR"]
-    },
-    "TX_VOLUME": {
-         "table_name": "BTC_DATA.DATA.TX_VOLUME",
-         "date_col": "DATE",
-         "numeric_cols": ["DAILY_TX_VOLUME_BTC"]
-    }
-}
 
 ######################################
 # Data Query & Merge
