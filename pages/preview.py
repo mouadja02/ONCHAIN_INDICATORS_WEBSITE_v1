@@ -115,11 +115,11 @@ df_btc_movement = session.sql(btc_movement_query).to_pandas()
 
 # Define mapping for five distinct states with colors and labels:
 state_color_label = {
-    2: {"color": "#27ae60", "label": "Increase significantly"},
-    1: {"color": "#2ecc71", "label": "Moderate increase"},
-    0: {"color": "#f1c40f", "label": "Unchanged"},
-    -1: {"color": "#e74c3c", "label": "Moderate decrease"},
-    -2: {"color": "#c0392b", "label": "Decrease significantly"}
+    2: {"color": "#ad0c00", "label": "Increase significantly"},
+    1: {"color": "#ff6f00", "label": "Moderate increase"},
+    0: {"color": "#fffb00", "label": "Unchanged"},
+    -1: {"color": "#55ff00", "label": "Moderate decrease"},
+    -2: {"color": "#006e07", "label": "Decrease significantly"}
 }
 
 ######################################
@@ -190,19 +190,6 @@ fig.update_yaxes(
 
 # Display Plot
 st.plotly_chart(fig, use_container_width=True)
-
-# Update legend markdown for clarity
-st.markdown("""
-**Legend:**  
-🟢 **Green:**  
- • **2:** Increase significantly  
- • **1:** Moderate increase  
-🟡 **Yellow:**  
- • **0:** Unchanged  
-🔴 **Red:**  
- • **-1:** Moderate decrease  
- • **-2:** Decrease significantly
-""", unsafe_allow_html=True)
 
 ######################################
 # 9) BTC Candlestick Chart with Dynamic Span
