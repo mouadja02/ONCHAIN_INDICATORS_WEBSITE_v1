@@ -302,7 +302,6 @@ st.download_button(
 st.title("Correlation Matrix of On-chain Features")
 
 
-
 ######################################
 # Table Configurations
 ######################################
@@ -637,4 +636,25 @@ weekly_corr_df = weekly_merged_df[[col for col in weekly_merged_df.columns if co
 weekly_corr_matrix = weekly_corr_df.corr(method='pearson')
 
 st.subheader("Weekly Aggregated Correlation Matrix Heatmap (Selected Features)")
-num_features = len(w
+num_features = len(weekly_corr_matrix.columns)
+fig_width = max(8, num_features * 0.8)
+fig_height = max(6, num_features * 0.8)
+fig, ax = plt.subplots(figsize=(fig_width, fig_height))
+fig.patch.set_facecolor("black")
+ax.set_facecolor("black")
+sns.heatmap(
+    weekly_corr_matrix,
+    annot=True,
+    cmap="RdBu_r",
+    vmin=-1,
+    vmax=1,
+    square=True,
+    ax=ax,
+    fmt=".2f",
+    cbar_kws={'shrink': 0.75, 'label': 'Correlation'}
+)
+ax.set_title("Correlation Matrix of Selected On-chain Features (Weekly Aggregated)", color="white")
+plt.xticks(rotation=45, ha="right", color="white")
+plt.yticks(rotation=0, color="white")
+st.pyplot(fig)
+
