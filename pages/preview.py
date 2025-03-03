@@ -387,7 +387,7 @@ with st.sidebar:
         help="Choose the on-chain tables you want to analyze."
     )
     
-    # Date range: Start and optional End date (with unique keys)
+    # Date range: Start and optional End date
     default_start_date = datetime.date(2015, 1, 1)
     start_date = st.date_input("Start Date", value=default_start_date, key="corr_start_date")
     
@@ -398,14 +398,14 @@ with st.sidebar:
     else:
         end_date = None
 
-    # Build the union of available features (renamed with table prefix)
+    # Build available features with table prefix (e.g. "TABLE:column")
     available_features = []
     for tbl in selected_tables:
         tbl_info = TABLE_DICT[tbl]
         for col in tbl_info["numeric_cols"]:
             available_features.append(f"{tbl}:{col}")
     
-    # Let the user choose which features (from the selected tables) to include
+    # Let the user choose which features to include for correlation
     selected_features = st.multiselect(
         "Select Features for Correlation:",
         available_features,
@@ -433,12 +433,12 @@ df_list = []
 for tbl in selected_tables:
     tbl_info = TABLE_DICT[tbl]
     date_col = tbl_info["date_col"]
-    # Determine which numeric columns from this table are selected by the user.
+    # Only query numeric columns that are in the selected features (they are in the format "TABLE:column")
     table_features = {f"{tbl}:{col}" for col in tbl_info["numeric_cols"]}
     features_to_query = table_features.intersection(set(selected_features))
     if not features_to_query:
         continue  # Skip table if no feature is selected from it.
-    # Map back to raw column names (remove prefix)
+    # Get raw column names from the selected features
     raw_cols = [feat.split(":", 1)[1] for feat in features_to_query]
     cols_for_query = ", ".join(raw_cols)
     query = f"""
@@ -452,8 +452,8 @@ for tbl in selected_tables:
         query += f" AND CAST({date_col} AS DATE) <= '{end_date}'\n"
     query += "ORDER BY DATE"
     df = session.sql(query).to_pandas()
-    # Rename raw columns to include the table prefix
-    rename_dict = {col: f"{col}" for col in raw_cols}
+    # Rename raw columns to include the table prefix (so they match the format "TABLE:column")
+    rename_dict = {col: f"{tbl}:{col}" for col in raw_cols}
     df.rename(columns=rename_dict, inplace=True)
     df_list.append(df)
 
@@ -468,9 +468,7 @@ for df in df_list[1:]:
 merged_df.sort_values("DATE", inplace=True)
 merged_df = merged_df.dropna(how="all")
 
-######################################
-# Apply EMA on Daily Data (if selected)
-######################################
+# Optionally apply EMA on daily data if selected
 if apply_ema:
     for feature in ema_features:
         if feature in merged_df.columns:
@@ -479,23 +477,23 @@ if apply_ema:
             merged_df[feature] = merged_df[ema_col]
             merged_df.drop(columns=[ema_col], inplace=True)
 
-######################################
-# Compute & Plot Daily Correlation Matrix
-######################################
-corr_matrix = merged_df.drop(columns=["DATE"]).corr(method='pearson')
+# Subset to only the selected features for correlation
+daily_corr_df = merged_df[[col for col in merged_df.columns if col in selected_features]]
 
-st.subheader("Daily Correlation Matrix Heatmap")
+# Compute and plot daily correlation matrix
+daily_corr_matrix = daily_corr_df.corr(method='pearson')
 
-num_features = len(corr_matrix.columns)
+st.subheader("Daily Correlation Matrix Heatmap (Selected Features)")
+
+num_features = len(daily_corr_matrix.columns)
 fig_width = max(8, num_features * 0.8)
 fig_height = max(6, num_features * 0.8)
 fig, ax = plt.subplots(figsize=(fig_width, fig_height))
-
 fig.patch.set_facecolor("black")
 ax.set_facecolor("black")
 
 sns.heatmap(
-    corr_matrix,
+    daily_corr_matrix,
     annot=True,
     cmap="RdBu_r",
     vmin=-1,
@@ -505,7 +503,7 @@ sns.heatmap(
     fmt=".2f",
     cbar_kws={'shrink': 0.75, 'label': 'Correlation'}
 )
-ax.set_title("Correlation Matrix of On-chain Features (Daily)", color="white")
+ax.set_title("Correlation Matrix of Selected On-chain Features (Daily)", color="white")
 plt.xticks(rotation=45, ha="right", color="white")
 plt.yticks(rotation=0, color="white")
 
@@ -516,7 +514,7 @@ st.pyplot(fig)
 ####################################################################################
 st.subheader("Weekly Aggregated Correlation: BTC Price Movement & Indicators Movement")
 
-# Function to query weekly aggregated data for a given table (other than BTC_PRICE_MOVEMENT)
+# Function to query weekly aggregated data for a given table (using AVG aggregation)
 def get_weekly_data(tbl_info, start_date, end_date):
     date_col = tbl_info["date_col"]
     numeric_cols = tbl_info["numeric_cols"]
@@ -631,16 +629,18 @@ if apply_ema:
             weekly_merged_df[feature] = weekly_merged_df[ema_col]
             weekly_merged_df.drop(columns=[ema_col], inplace=True)
 
-# Compute correlation matrix on weekly aggregated data
-weekly_corr_matrix = weekly_merged_df.drop(columns=["DATE"]).corr(method='pearson')
+# Subset to only the selected features for weekly correlation
+weekly_corr_df = weekly_merged_df[[col for col in weekly_merged_df.columns if col in selected_features]]
 
-st.subheader("Weekly Aggregated Correlation Matrix Heatmap")
+# Compute correlation matrix on weekly aggregated data
+weekly_corr_matrix = weekly_corr_df.corr(method='pearson')
+
+st.subheader("Weekly Aggregated Correlation Matrix Heatmap (Selected Features)")
 
 num_features = len(weekly_corr_matrix.columns)
 fig_width = max(8, num_features * 0.8)
 fig_height = max(6, num_features * 0.8)
 fig, ax = plt.subplots(figsize=(fig_width, fig_height))
-
 fig.patch.set_facecolor("black")
 ax.set_facecolor("black")
 
@@ -655,7 +655,7 @@ sns.heatmap(
     fmt=".2f",
     cbar_kws={'shrink': 0.75, 'label': 'Correlation'}
 )
-ax.set_title("Correlation Matrix of On-chain Features (Weekly Aggregated)", color="white")
+ax.set_title("Correlation Matrix of Selected On-chain Features (Weekly Aggregated)", color="white")
 plt.xticks(rotation=45, ha="right", color="white")
 plt.yticks(rotation=0, color="white")
 
