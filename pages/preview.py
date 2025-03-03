@@ -305,7 +305,6 @@ st.title("Correlation Matrix of On-chain Features")
 ######################################
 # Table Configurations
 ######################################
-# Define the on-chain tables with their details:
 TABLE_DICT = {
     "BTC_PRICE_MOVEMENT": {
          "table_name": "BTC_DATA.DATA.BTC_PRICE_MOVEMENT_WEEKLY",
@@ -418,7 +417,6 @@ with st.sidebar:
     apply_ema = st.checkbox("Apply EMA on selected features", value=False, key="apply_ema")
     if apply_ema:
         ema_period = st.number_input("EMA Period (days)", min_value=2, max_value=200, value=20, key="ema_period")
-        # Let user select from the features they already selected, which ones to EMA-transform
         ema_features = st.multiselect(
             "Select features to apply EMA on (raw values will be replaced):",
             selected_features,
@@ -429,7 +427,7 @@ with st.sidebar:
         ema_features = []
 
 ######################################
-# Data Query & Merge
+# DAILY DATA: Query & Merge (Raw Data)
 ######################################
 df_list = []
 for tbl in selected_tables:
@@ -454,7 +452,7 @@ for tbl in selected_tables:
         query += f" AND CAST({date_col} AS DATE) <= '{end_date}'\n"
     query += "ORDER BY DATE"
     df = session.sql(query).to_pandas()
-    # Rename raw columns to have the table prefix
+    # Rename raw columns to include the table prefix
     rename_dict = {col: f"{col}" for col in raw_cols}
     df.rename(columns=rename_dict, inplace=True)
     df_list.append(df)
@@ -463,7 +461,7 @@ if not df_list:
     st.error("No data returned for selected tables/features.")
     st.stop()
 
-# Merge all dataframes on DATE using an outer join
+# Merge all daily dataframes on DATE using an outer join
 merged_df = df_list[0]
 for df in df_list[1:]:
     merged_df = pd.merge(merged_df, df, on="DATE", how="outer")
@@ -471,36 +469,28 @@ merged_df.sort_values("DATE", inplace=True)
 merged_df = merged_df.dropna(how="all")
 
 ######################################
-# Apply EMA (if selected)
+# Apply EMA on Daily Data (if selected)
 ######################################
 if apply_ema:
     for feature in ema_features:
         if feature in merged_df.columns:
-            # Compute EMA and replace raw values with EMA values
             ema_col = f"EMA_{feature}"
             merged_df[ema_col] = merged_df[feature].ewm(span=ema_period).mean()
-            # Replace raw feature with EMA version
             merged_df[feature] = merged_df[ema_col]
-            # Optionally drop the temporary EMA column:
             merged_df.drop(columns=[ema_col], inplace=True)
 
 ######################################
-# Compute Correlation Matrix
+# Compute & Plot Daily Correlation Matrix
 ######################################
-# Remove DATE column for correlation computation
 corr_matrix = merged_df.drop(columns=["DATE"]).corr(method='pearson')
 
-######################################
-# Plot Correlation Heatmap using Matplotlib/Seaborn
-######################################
-st.subheader("Correlation Matrix Heatmap")
+st.subheader("Daily Correlation Matrix Heatmap")
 
 num_features = len(corr_matrix.columns)
 fig_width = max(8, num_features * 0.8)
 fig_height = max(6, num_features * 0.8)
 fig, ax = plt.subplots(figsize=(fig_width, fig_height))
 
-# Set dark background
 fig.patch.set_facecolor("black")
 ax.set_facecolor("black")
 
@@ -515,92 +505,147 @@ sns.heatmap(
     fmt=".2f",
     cbar_kws={'shrink': 0.75, 'label': 'Correlation'}
 )
-ax.set_title("Correlation Matrix of On-chain Features", color="white")
+ax.set_title("Correlation Matrix of On-chain Features (Daily)", color="white")
 plt.xticks(rotation=45, ha="right", color="white")
 plt.yticks(rotation=0, color="white")
 
 st.pyplot(fig)
 
 ####################################################################################
+# WEEKLY AGGREGATED DATA: Query & Merge (Indicators Movement)
+####################################################################################
+st.subheader("Weekly Aggregated Correlation: BTC Price Movement & Indicators Movement")
 
-
-
-######################################
-# Data Query & Merge
-######################################
-df_list = []
-for tbl in selected_tables:
-    tbl_info = TABLE_DICT[tbl]
+# Function to query weekly aggregated data for a given table (other than BTC_PRICE_MOVEMENT)
+def get_weekly_data(tbl_info, start_date, end_date):
     date_col = tbl_info["date_col"]
-    # Determine which numeric columns for this table are selected by the user.
-    table_features = {f"{tbl}:{col}" for col in tbl_info["numeric_cols"]}
-    features_to_query = table_features.intersection(set(selected_features))
-    if not features_to_query:
-        continue  # Skip table if no feature is selected from it.
-    # Map back to raw column names (remove prefix)
-    raw_cols = [feat.split(":", 1)[1] for feat in features_to_query]
-    cols_for_query = ", ".join(raw_cols)
+    numeric_cols = tbl_info["numeric_cols"]
+    # Build aggregation for each numeric column using AVG
+    agg_cols = ", ".join([f"AVG({col}) AS {col}" for col in numeric_cols])
     query = f"""
-        SELECT
-            CAST({date_col} AS DATE) AS DATE,
-            {cols_for_query}
-        FROM {tbl_info['table_name']}
-        WHERE CAST({date_col} AS DATE) >= '{start_date}'
+        WITH weekly_data AS (
+            SELECT 
+                DATEADD(day, 
+                    CASE 
+                        WHEN DAYOFWEEK(CAST({date_col} AS DATE)) = 1 THEN -6 
+                        ELSE 2 - DAYOFWEEK(CAST({date_col} AS DATE)) 
+                    END, CAST({date_col} AS DATE)) AS week_start,
+                {agg_cols}
+            FROM {tbl_info['table_name']}
+            WHERE CAST({date_col} AS DATE) >= '{start_date}'
     """
     if end_date:
         query += f" AND CAST({date_col} AS DATE) <= '{end_date}'\n"
-    query += "ORDER BY DATE"
-    # Execute the query (assuming session is your database connection)
-    df = session.sql(query).to_pandas()
-    # Rename raw columns to include the table prefix
-    rename_dict = {col: f"{tbl}:{col}" for col in raw_cols}
-    df.rename(columns=rename_dict, inplace=True)
-    df_list.append(df)
+    query += f"""
+            GROUP BY DATEADD(day, 
+                    CASE 
+                        WHEN DAYOFWEEK(CAST({date_col} AS DATE)) = 1 THEN -6 
+                        ELSE 2 - DAYOFWEEK(CAST({date_col} AS DATE)) 
+                    END, CAST({date_col} AS DATE))
+        )
+        SELECT week_start AS DATE, {', '.join(numeric_cols)}
+        FROM weekly_data
+        ORDER BY week_start
+    """
+    return session.sql(query).to_pandas()
 
-if not df_list:
-    st.error("No data returned for selected tables/features.")
+weekly_df_list = []
+
+for tbl in selected_tables:
+    tbl_info = TABLE_DICT[tbl]
+    if tbl == "BTC_PRICE_MOVEMENT":
+        # Use the provided BTC price movement weekly query
+        btc_price_query = f"""
+        WITH weekly_avg AS (
+            SELECT 
+                DATEADD(day, 
+                    CASE 
+                        WHEN DAYOFWEEK(DATE) = 1 THEN -6 
+                        ELSE 2 - DAYOFWEEK(DATE) 
+                    END, DATE) AS week_start,
+                AVG(BTC_PRICE_USD) AS avg_price
+            FROM BTC_DATA.DATA.BTC_PRICE_USD
+            GROUP BY DATEADD(day, 
+                CASE 
+                    WHEN DAYOFWEEK(DATE) = 1 THEN -6 
+                    ELSE 2 - DAYOFWEEK(DATE) 
+                END, DATE)
+        )
+        SELECT
+            week_start AS DATE,
+            avg_price,
+            LAG(avg_price) OVER (ORDER BY week_start) AS prev_avg,
+            CASE 
+                WHEN LAG(avg_price) OVER (ORDER BY week_start) IS NULL THEN NULL
+                WHEN NULLIF(LAG(avg_price) OVER (ORDER BY week_start), 0) IS NULL THEN 0
+                WHEN ABS((avg_price - LAG(avg_price) OVER (ORDER BY week_start))
+                       / NULLIF(LAG(avg_price) OVER (ORDER BY week_start), 0) * 100) <= 0.5 THEN 0
+                WHEN (avg_price - LAG(avg_price) OVER (ORDER BY week_start))
+                     / NULLIF(LAG(avg_price) OVER (ORDER BY week_start), 0) * 100 > 0.5 
+                     AND (avg_price - LAG(avg_price) OVER (ORDER BY week_start))
+                     / NULLIF(LAG(avg_price) OVER (ORDER BY week_start), 0) * 100 < 8.0 THEN 1
+                WHEN (avg_price - LAG(avg_price) OVER (ORDER BY week_start))
+                     / NULLIF(LAG(avg_price) OVER (ORDER BY week_start), 0) * 100 >= 8.0 THEN 2
+                WHEN (avg_price - LAG(avg_price) OVER (ORDER BY week_start))
+                     / NULLIF(LAG(avg_price) OVER (ORDER BY week_start), 0) * 100 < -0.5 
+                     AND (avg_price - LAG(avg_price) OVER (ORDER BY week_start))
+                     / NULLIF(LAG(avg_price) OVER (ORDER BY week_start), 0) * 100 > -8.0 THEN -1
+                WHEN (avg_price - LAG(avg_price) OVER (ORDER BY week_start))
+                     / NULLIF(LAG(avg_price) OVER (ORDER BY week_start), 0) * 100 <= -8.0 THEN -2
+                ELSE 0
+            END AS price_movement_state
+        FROM weekly_avg
+        ORDER BY week_start;
+        """
+        df_btc_weekly = session.sql(btc_price_query).to_pandas()
+        # Rename columns to include table prefix for consistency
+        df_btc_weekly.rename(columns={
+            "avg_price": "BTC_PRICE_MOVEMENT:AVG_PRICE",
+            "price_movement_state": "BTC_PRICE_MOVEMENT:PRICE_MOVEMENT_STATE"
+        }, inplace=True)
+        weekly_df_list.append(df_btc_weekly)
+    else:
+        df_tbl = get_weekly_data(tbl_info, start_date, end_date)
+        # Rename numeric columns with table prefix
+        rename_dict = {col: f"{tbl}:{col}" for col in tbl_info["numeric_cols"]}
+        df_tbl.rename(columns=rename_dict, inplace=True)
+        weekly_df_list.append(df_tbl)
+
+if not weekly_df_list:
+    st.error("No weekly data returned for selected tables/features.")
     st.stop()
 
-# Merge all dataframes on DATE using an outer join
-merged_df = df_list[0]
-for df in df_list[1:]:
-    merged_df = pd.merge(merged_df, df, on="DATE", how="outer")
-merged_df.sort_values("DATE", inplace=True)
-merged_df = merged_df.dropna(how="all")
+# Merge all weekly dataframes on DATE using an outer join
+weekly_merged_df = weekly_df_list[0]
+for df in weekly_df_list[1:]:
+    weekly_merged_df = pd.merge(weekly_merged_df, df, on="DATE", how="outer")
+weekly_merged_df.sort_values("DATE", inplace=True)
+weekly_merged_df = weekly_merged_df.dropna(how="all")
 
-######################################
-# Apply EMA (if selected)
-######################################
+# Optionally apply EMA on weekly data if selected
 if apply_ema:
     for feature in ema_features:
-        if feature in merged_df.columns:
+        if feature in weekly_merged_df.columns:
             ema_col = f"EMA_{feature}"
-            merged_df[ema_col] = merged_df[feature].ewm(span=ema_period).mean()
-            merged_df[feature] = merged_df[ema_col]
-            merged_df.drop(columns=[ema_col], inplace=True)
+            weekly_merged_df[ema_col] = weekly_merged_df[feature].ewm(span=ema_period).mean()
+            weekly_merged_df[feature] = weekly_merged_df[ema_col]
+            weekly_merged_df.drop(columns=[ema_col], inplace=True)
 
-######################################
-# Compute Correlation Matrix
-######################################
-# Remove DATE column for correlation computation
-corr_matrix = merged_df.drop(columns=["DATE"]).corr(method='pearson')
+# Compute correlation matrix on weekly aggregated data
+weekly_corr_matrix = weekly_merged_df.drop(columns=["DATE"]).corr(method='pearson')
 
-######################################
-# Plot Correlation Heatmap using Matplotlib/Seaborn
-######################################
-st.subheader("Correlation Matrix Heatmap")
+st.subheader("Weekly Aggregated Correlation Matrix Heatmap")
 
-num_features = len(corr_matrix.columns)
+num_features = len(weekly_corr_matrix.columns)
 fig_width = max(8, num_features * 0.8)
 fig_height = max(6, num_features * 0.8)
 fig, ax = plt.subplots(figsize=(fig_width, fig_height))
 
-# Set dark background for the plot
 fig.patch.set_facecolor("black")
 ax.set_facecolor("black")
 
 sns.heatmap(
-    corr_matrix,
+    weekly_corr_matrix,
     annot=True,
     cmap="RdBu_r",
     vmin=-1,
@@ -610,9 +655,8 @@ sns.heatmap(
     fmt=".2f",
     cbar_kws={'shrink': 0.75, 'label': 'Correlation'}
 )
-ax.set_title("Correlation Matrix of On-chain Features", color="white")
+ax.set_title("Correlation Matrix of On-chain Features (Weekly Aggregated)", color="white")
 plt.xticks(rotation=45, ha="right", color="white")
 plt.yticks(rotation=0, color="white")
 
 st.pyplot(fig)
-
