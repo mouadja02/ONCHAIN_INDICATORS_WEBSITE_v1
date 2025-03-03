@@ -11,18 +11,18 @@ session = cx.session()
 
 # Query Data
 query = """
-    SELECT SNAPSHOT_DATE, AGE_BUCKET, PERCENT_SUPPLY
+    SELECT DATE, AGE_BUCKET, PERCENT_SUPPLY
     FROM HODL_Waves
     ORDER BY SNAPSHOT_DATE ASC
 """
 df = session.sql(query).to_pandas()
 
 # Convert date column to datetime
-df["SNAPSHOT_DATE"] = pd.to_datetime(df["SNAPSHOT_DATE"])
+df["SNAPSHOT_DATE"] = pd.to_datetime(df["DATE"])
 
 # Filter out future dates
 today = pd.to_datetime("today").normalize()  # Get today's date without time
-df = df[df["SNAPSHOT_DATE"] < today]
+df = df[df["DATE"] < today]
 
 # Sidebar Filters
 st.sidebar.header("Filter Data")
