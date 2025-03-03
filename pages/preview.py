@@ -159,7 +159,7 @@ if show_movement_scatter:
         if not state_data.empty:
             fig.add_trace(
                 go.Scatter(
-                    x=state_data["DATE"],
+                    x=state_data["WEEK_START"],
                     y=state_data["AVG_PRICE"],
                     mode="markers",
                     marker=dict(color=state_color_label[state]["color"], size=6),
