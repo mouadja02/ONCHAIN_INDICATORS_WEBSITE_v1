@@ -647,49 +647,6 @@ TABLE_DICT = {
 }
 
 ######################################
-# Sidebar: Correlation Settings
-######################################
-with st.sidebar:
-    st.header("Correlation Settings")
-    
-    # Select tables to include
-    selected_tables = st.multiselect(
-        "Select tables to include:",
-        list(TABLE_DICT.keys()),
-        default=list(TABLE_DICT.keys())[:3],
-        help="Choose the on-chain tables you want to analyze."
-    )
-
-
-    # Build the union of available features (with table prefix)
-    available_features = []
-    for tbl in selected_tables:
-        tbl_info = TABLE_DICT[tbl]
-        for col in tbl_info["numeric_cols"]:
-            available_features.append(f"{tbl}:{col}")
-    
-    # Let the user choose which features to include for correlation
-    selected_features = st.multiselect(
-        "Select Features for Correlation:",
-        available_features,
-        default=available_features,
-        key="selected_features"
-    )
-    
-    # Option to apply EMA on selected features
-    apply_ema = st.checkbox("Apply EMA on selected features", value=False, key="apply_ema")
-    if apply_ema:
-        ema_period = st.number_input("EMA Period (days)", min_value=2, max_value=200, value=20, key="ema_period")
-        ema_features = st.multiselect(
-            "Select features to apply EMA on (raw values will be replaced):",
-            selected_features,
-            default=selected_features,
-            key="ema_features"
-        )
-    else:
-        ema_features = []
-
-######################################
 # Data Query & Merge
 ######################################
 df_list = []
