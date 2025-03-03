@@ -574,9 +574,199 @@ plt.yticks(rotation=0, color="white")
 
 st.pyplot(fig)
 
+####################################################################################
+import datetime
+import pandas as pd
+import matplotlib.pyplot as plt
+import seaborn as sns
+import streamlit as st
 
-"""
-import io
+# Define the on-chain tables with their details:
+TABLE_DICT = {
+    "BTC_PRICE_MOVEMENT": {
+         "table_name": "BTC_DATA.DATA.BTC_PRICE_MOVEMENT_WEEKLY",
+         "date_col": "WEEK_START",
+         "numeric_cols": ["AVG_PRICE", "PRICE_MOVEMENT_STATE"]
+    },
+    "ACTIVE_ADDRESSES": {
+         "table_name": "BTC_DATA.DATA.ACTIVE_ADDRESSES",
+         "date_col": "DATE",
+         "numeric_cols": ["ACTIVE_ADDRESSES"]
+    },
+    "BTC_REALIZED_CAP_AND_PRICE": {
+         "table_name": "BTC_DATA.DATA.BTC_REALIZED_CAP_AND_PRICE",
+         "date_col": "DATE",
+         "numeric_cols": ["REALIZED_CAP_USD", "TOTAL_UNSPENT_BTC", "REALIZED_PRICE_USD"]
+    },
+    "CDD": {
+         "table_name": "BTC_DATA.DATA.CDD",
+         "date_col": "DATE",
+         "numeric_cols": ["CDD_RAW", "CDD_30_DMA", "CDD_90_DMA"]
+    },
+    "EXCHANGE_FLOW": {
+         "table_name": "BTC_DATA.DATA.EXCHANGE_FLOW",
+         "date_col": "DAY",
+         "numeric_cols": ["INFLOW", "OUTFLOW", "NETFLOW"]
+    },
+    "HOLDER_REALIZED_PRICES": {
+         "table_name": "BTC_DATA.DATA.HOLDER_REALIZED_PRICES",
+         "date_col": "DATE",
+         "numeric_cols": ["STH_REALIZED_PRICE", "LTH_REALIZED_PRICE"]
+    },
+    "MVRV": {
+         "table_name": "BTC_DATA.DATA.MVRV",
+         "date_col": "DATE",
+         "numeric_cols": ["REALIZED_CAP_USD", "TOTAL_UNSPENT_BTC", "MARKET_CAP_USD", "MVRV"]
+    },
+    "MVRV_WITH_HOLDER_TYPES": {
+         "table_name": "BTC_DATA.DATA.MVRV_WITH_HOLDER_TYPES",
+         "date_col": "DATE",
+         "numeric_cols": ["OVERALL_MVRV", "STH_MVRV", "LTH_MVRV"]
+    },
+    "NUPL": {
+         "table_name": "BTC_DATA.DATA.NUPL",
+         "date_col": "DATE",
+         "numeric_cols": ["MARKET_CAP_USD", "REALIZED_CAP_USD", "NUPL", "NUPL_PERCENT"]
+    },
+    "PUELL_MULTIPLE": {
+         "table_name": "BTC_DATA.DATA.PUELL_MULTIPLE",
+         "date_col": "DATE",
+         "numeric_cols": ["MINTED_BTC", "DAILY_ISSUANCE_USD", "MA_365_ISSUANCE_USD", "PUELL_MULTIPLE"]
+    },
+    "SOPR": {
+         "table_name": "BTC_DATA.DATA.SOPR",
+         "date_col": "SPENT_DATE",
+         "numeric_cols": ["SOPR"]
+    },
+    "SOPR_WITH_HOLDER_TYPES": {
+         "table_name": "BTC_DATA.DATA.SOPR_WITH_HOLDER_TYPES",
+         "date_col": "SALE_DATE",
+         "numeric_cols": ["OVERALL_SOPR", "STH_SOPR", "LTH_SOPR"]
+    },
+    "TX_COUNT": {
+         "table_name": "BTC_DATA.DATA.TX_COUNT",
+         "date_col": "BLOCK_TIMESTAMP",
+         "numeric_cols": ["TX_COUNT"]
+    },
+    "TX_VOLUME": {
+         "table_name": "BTC_DATA.DATA.TX_VOLUME",
+         "date_col": "DATE",
+         "numeric_cols": ["DAILY_TX_VOLUME_BTC"]
+    }
+}
+
+######################################
+# Sidebar: Correlation Settings
+######################################
+with st.sidebar:
+    st.header("Correlation Settings")
+    
+    # Select tables to include
+    selected_tables = st.multiselect(
+        "Select tables to include:",
+        list(TABLE_DICT.keys()),
+        default=list(TABLE_DICT.keys())[:3],
+        help="Choose the on-chain tables you want to analyze."
+    )
+    
+    # Date range: Start and optional End date (with unique keys)
+    default_start_date = datetime.date(2015, 1, 1)
+    start_date = st.date_input("Start Date", value=default_start_date, key="corr_start_date")
+    
+    activate_end_date = st.checkbox("Activate End Date", value=False, key="corr_activate_end")
+    if activate_end_date:
+        default_end_date = datetime.date.today()
+        end_date = st.date_input("End Date", value=default_end_date, key="corr_end_date")
+    else:
+        end_date = None
+
+    # Build the union of available features (with table prefix)
+    available_features = []
+    for tbl in selected_tables:
+        tbl_info = TABLE_DICT[tbl]
+        for col in tbl_info["numeric_cols"]:
+            available_features.append(f"{tbl}:{col}")
+    
+    # Let the user choose which features to include for correlation
+    selected_features = st.multiselect(
+        "Select Features for Correlation:",
+        available_features,
+        default=available_features,
+        key="selected_features"
+    )
+    
+    # Option to apply EMA on selected features
+    apply_ema = st.checkbox("Apply EMA on selected features", value=False, key="apply_ema")
+    if apply_ema:
+        ema_period = st.number_input("EMA Period (days)", min_value=2, max_value=200, value=20, key="ema_period")
+        ema_features = st.multiselect(
+            "Select features to apply EMA on (raw values will be replaced):",
+            selected_features,
+            default=selected_features,
+            key="ema_features"
+        )
+    else:
+        ema_features = []
+
+######################################
+# Data Query & Merge
+######################################
+df_list = []
+for tbl in selected_tables:
+    tbl_info = TABLE_DICT[tbl]
+    date_col = tbl_info["date_col"]
+    # Determine which numeric columns for this table are selected by the user.
+    table_features = {f"{tbl}:{col}" for col in tbl_info["numeric_cols"]}
+    features_to_query = table_features.intersection(set(selected_features))
+    if not features_to_query:
+        continue  # Skip table if no feature is selected from it.
+    # Map back to raw column names (remove prefix)
+    raw_cols = [feat.split(":", 1)[1] for feat in features_to_query]
+    cols_for_query = ", ".join(raw_cols)
+    query = f"""
+        SELECT
+            CAST({date_col} AS DATE) AS DATE,
+            {cols_for_query}
+        FROM {tbl_info['table_name']}
+        WHERE CAST({date_col} AS DATE) >= '{start_date}'
+    """
+    if end_date:
+        query += f" AND CAST({date_col} AS DATE) <= '{end_date}'\n"
+    query += "ORDER BY DATE"
+    # Execute the query (assuming session is your database connection)
+    df = session.sql(query).to_pandas()
+    # Rename raw columns to include the table prefix
+    rename_dict = {col: f"{tbl}:{col}" for col in raw_cols}
+    df.rename(columns=rename_dict, inplace=True)
+    df_list.append(df)
+
+if not df_list:
+    st.error("No data returned for selected tables/features.")
+    st.stop()
+
+# Merge all dataframes on DATE using an outer join
+merged_df = df_list[0]
+for df in df_list[1:]:
+    merged_df = pd.merge(merged_df, df, on="DATE", how="outer")
+merged_df.sort_values("DATE", inplace=True)
+merged_df = merged_df.dropna(how="all")
+
+######################################
+# Apply EMA (if selected)
+######################################
+if apply_ema:
+    for feature in ema_features:
+        if feature in merged_df.columns:
+            ema_col = f"EMA_{feature}"
+            merged_df[ema_col] = merged_df[feature].ewm(span=ema_period).mean()
+            merged_df[feature] = merged_df[ema_col]
+            merged_df.drop(columns=[ema_col], inplace=True)
+
+######################################
+# Compute Correlation Matrix
+######################################
+# Remove DATE column for correlation computation
+corr_matrix = merged_df.drop(columns=["DATE"]).corr(method='pearson')
 
 ######################################
 # Plot Correlation Heatmap using Matplotlib/Seaborn
@@ -588,9 +778,10 @@ fig_width = max(8, num_features * 0.8)
 fig_height = max(6, num_features * 0.8)
 fig, ax = plt.subplots(figsize=(fig_width, fig_height))
 
-# Paramètres pour le thème sombre (affiché dans l'app)
+# Set dark background for the plot
 fig.patch.set_facecolor("black")
 ax.set_facecolor("black")
+
 sns.heatmap(
     corr_matrix,
     annot=True,
@@ -606,37 +797,5 @@ ax.set_title("Correlation Matrix of On-chain Features", color="white")
 plt.xticks(rotation=45, ha="right", color="white")
 plt.yticks(rotation=0, color="white")
 
-st.plotly_chart(fig, use_container_width=True)  # ou st.pyplot(fig) selon votre préférence
+st.pyplot(fig)
 
-######################################
-# Option to Save Plot on White Background
-######################################
-if st.button("Save Correlation Plot (White Background)"):
-    # Créer une nouvelle figure identique mais avec fond blanc
-    fig_save, ax_save = plt.subplots(figsize=(fig_width, fig_height))
-    fig_save.patch.set_facecolor("white")
-    ax_save.set_facecolor("white")
-    
-    sns.heatmap(
-        corr_matrix,
-        annot=True,
-        cmap="RdBu_r",
-        vmin=-1,
-        vmax=1,
-        square=True,
-        ax=ax_save,
-        fmt=".2f",
-        cbar_kws={'shrink': 0.75, 'label': 'Correlation'}
-    )
-    ax_save.set_title("Correlation Matrix of On-chain Features", color="black")
-    plt.xticks(rotation=45, ha="right", color="black")
-    plt.yticks(rotation=0, color="black")
-    
-    # Enregistrer la figure dans un buffer
-    buf = io.BytesIO()
-    fig_save.savefig(buf, format="png", bbox_inches="tight", facecolor="white")
-    buf.seek(0)
-    st.download_button("Download Plot as PNG", data=buf, file_name="correlation_heatmap.png", mime="image/png")
-    
-    plt.close(fig_save)
-"""
