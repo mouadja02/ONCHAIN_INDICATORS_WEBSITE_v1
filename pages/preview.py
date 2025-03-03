@@ -100,37 +100,27 @@ with st.sidebar:
 # 7) BTC PRICE MOVEMENT QUERY
 ######################################
 btc_movement_query = f"""
-    WITH price_changes AS (
-        SELECT 
-            CAST(DATE AS DATE) AS DATE,
-            BTC_PRICE_USD,
-            LAG(BTC_PRICE_USD) OVER (ORDER BY DATE) AS previous_price
-        FROM {BTC_PRICE_TABLE}
-    )
-    SELECT 
-        DATE,
-        BTC_PRICE_USD,
-        CASE 
-            WHEN previous_price IS NULL THEN NULL  
-            WHEN BTC_PRICE_USD > previous_price * (1 + {movement_threshold} / 100) THEN 1  
-            WHEN BTC_PRICE_USD < previous_price * (1 - {movement_threshold} / 100) THEN -1  
-            ELSE 0  
-        END AS PRICE_MOVEMENT
-    FROM price_changes
-    WHERE BTC_PRICE_USD IS NOT NULL
-      AND DATE >= '{selected_start_date}'
+    SELECT WEEK_START, AVG_PRICE, PRICE_MOVEMENT_STATE 
+    FROM BTC_DATA.DATA.BTC_PRICE_MOVEMENT_WEEKLY
+    WHERE AVG_PRICE IS NOT NULL
+      AND WEEK_START >= '{selected_start_date}'
 """
 
 if selected_end_date:
-    btc_movement_query += f" AND DATE <= '{selected_end_date}'"
+    btc_movement_query += f" AND WEEK_START <= '{selected_end_date}'"
 
-btc_movement_query += " ORDER BY DATE"
+btc_movement_query += " ORDER BY WEEK_START"
 
 df_btc_movement = session.sql(btc_movement_query).to_pandas()
 
-# Map movement states to colors
-color_map = {1: "#2ECC71", 0: "#F1C40F", -1: "#E74C3C"}  
-df_btc_movement["Color"] = df_btc_movement["PRICE_MOVEMENT"].map(color_map)
+# Define mapping for five distinct states with colors and labels:
+state_color_label = {
+    2: {"color": "#27ae60", "label": "Increase significantly"},
+    1: {"color": "#2ecc71", "label": "Moderate increase"},
+    0: {"color": "#f1c40f", "label": "Unchanged"},
+    -1: {"color": "#e74c3c", "label": "Moderate decrease"},
+    -2: {"color": "#c0392b", "label": "Decrease significantly"}
+}
 
 ######################################
 # 8) MAIN PLOT (BTC Price + Scatter)
@@ -142,8 +132,8 @@ if show_btc_price:
     if chart_type_price == "Line":
         fig.add_trace(
             go.Scatter(
-                x=df_btc_movement["DATE"],
-                y=df_btc_movement["BTC_PRICE_USD"],
+                x=df_btc_movement["WEEK_START"],
+                y=df_btc_movement["AVG_PRICE"],
                 mode="lines",
                 name="BTC Price (USD)",
                 line=dict(color="#3498DB")
@@ -153,26 +143,30 @@ if show_btc_price:
     else:
         fig.add_trace(
             go.Bar(
-                x=df_btc_movement["DATE"],
-                y=df_btc_movement["BTC_PRICE_USD"],
+                x=df_btc_movement["WEEK_START"],
+                y=df_btc_movement["AVG_PRICE"],
                 name="BTC Price (USD)",
                 marker_color="#3498DB"
             ),
             secondary_y=True
         )
 
-# Scatter plot for BTC Price Movement States
+# Scatter plot for BTC Price Movement States:
+# Loop through each state to add a separate scatter trace with its unique color.
 if show_movement_scatter:
-    fig.add_trace(
-        go.Scatter(
-            x=df_btc_movement["DATE"],
-            y=df_btc_movement["BTC_PRICE_USD"],
-            mode="markers",
-            marker=dict(color=df_btc_movement["Color"], size=6),
-            name="BTC Price Movement"
-        ),
-        secondary_y=True
-    )
+    for state in sorted(state_color_label.keys(), reverse=True):  # ordering: 2,1,0,-1,-2
+        state_data = df_btc_movement[df_btc_movement["PRICE_MOVEMENT_STATE"] == state]
+        if not state_data.empty:
+            fig.add_trace(
+                go.Scatter(
+                    x=state_data["WEEK_START"],
+                    y=state_data["AVG_PRICE"],
+                    mode="markers",
+                    marker=dict(color=state_color_label[state]["color"], size=6),
+                    name=state_color_label[state]["label"]
+                ),
+                secondary_y=True
+            )
 
 # Update Layout
 fig.update_layout(
@@ -197,12 +191,17 @@ fig.update_yaxes(
 # Display Plot
 st.plotly_chart(fig, use_container_width=True)
 
-
+# Update legend markdown for clarity
 st.markdown("""
 **Legend:**  
-🟢 **Green (🔼 Increase, > Threshold for unchanged state)**  
-🟡 **Yellow (⏸ Unchanged, within ± Threshold for unchanged state)**  
-🔴 **Red (🔽 Decrease, > Threshold for unchanged state)**
+🟢 **Green:**  
+ • **2:** Increase significantly  
+ • **1:** Moderate increase  
+🟡 **Yellow:**  
+ • **0:** Unchanged  
+🔴 **Red:**  
+ • **-1:** Moderate decrease  
+ • **-2:** Decrease significantly
 """, unsafe_allow_html=True)
 
 ######################################
@@ -229,7 +228,6 @@ elif candle_span == "Monthly":
 
 # Build the query to aggregate open, high, low, close for each period
 candle_query = f"""
-CREATE OR REPLACE TABLE BTC_DATA.DATA.BTC_CANDLE_CHART AS
 WITH cte AS (
     SELECT 
         {period_expr} AS period,
