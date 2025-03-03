@@ -66,7 +66,7 @@ else:
     # 5. Visualisation - heatmap matplotlib
     # -----------------------------------------------------------------------------
     fig, ax = plt.subplots(figsize=(6, 6))
-    im = ax.imshow(corr_data, cmap="RdYlBu", aspect="auto")
+    im = ax.imshow(corr_data, cmap="cividis", aspect="auto")
 
     ax.set_xticks(np.arange(len(cols_for_corr)))
     ax.set_yticks(np.arange(len(cols_for_corr)))
