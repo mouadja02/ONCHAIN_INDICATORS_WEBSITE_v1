@@ -101,7 +101,7 @@ else:
     if st.button("Save Correlation Plot (White Background)"):
     # Enregistrer la figure dans un buffer
         buf = io.BytesIO()
-        fig_save.savefig(buf, format="png", bbox_inches="tight", facecolor="white")
+        fig.savefig(buf, format="png", bbox_inches="tight", facecolor="white")
         buf.seek(0)
         st.download_button("Download Plot as PNG", data=buf, file_name="correlation_heatmap.png", mime="image/png")
         
