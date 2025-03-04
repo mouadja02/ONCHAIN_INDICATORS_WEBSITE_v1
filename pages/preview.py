@@ -106,6 +106,6 @@ else:
         buf.seek(0)
         st.download_button("Download Plot as PNG", data=buf, file_name="correlation_heatmap.png", mime="image/png")
         
-        plt.close(FIG)
+        plt.close(fig)
 
 
