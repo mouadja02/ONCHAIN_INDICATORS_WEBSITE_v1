@@ -72,6 +72,7 @@ else:
     
     # Set dark background (like in the seaborn version)
     fig.patch.set_facecolor("black")
+    fiG.patch.set_facecolor("black")
     ax.set_facecolor("black")
     
     # Display the correlation matrix using imshow with similar parameters as sns.heatmap
@@ -105,6 +106,6 @@ else:
         buf.seek(0)
         st.download_button("Download Plot as PNG", data=buf, file_name="correlation_heatmap.png", mime="image/png")
         
-        plt.close(fig_save)
+        plt.close(FIG)
 
 
