@@ -49,6 +49,8 @@ selected_indicators = st.sidebar.multiselect(
     default=all_state_cols[:5]  # Exemple : on en sélectionne 5 par défaut
 )
 
+import io
+
 # -----------------------------------------------------------------------------
 # 4. Construction de la matrice de corrélation
 # -----------------------------------------------------------------------------
@@ -96,39 +98,13 @@ else:
     
     fig.tight_layout()
     st.pyplot(fig)
-
-
-import io
-
-######################################
-# Option to Save Plot on White Background
-######################################
-if st.button("Save Correlation Plot (White Background)"):
-    fig_width = max(8, num_features * 0.8)
-    fig_height = max(6, num_features * 0.8)
-    fig_save, ax_save = plt.subplots(figsize=(fig_width, fig_height))
-    fig_save.patch.set_facecolor("white")
-    ax_save.set_facecolor("white")
-    
-    sns.heatmap(
-        corr_matrix,
-        annot=True,
-        cmap="RdBu_r",
-        vmin=-1,
-        vmax=1,
-        square=True,
-        ax=ax_save,
-        fmt=".2f",
-        cbar_kws={'shrink': 0.75, 'label': 'Correlation'}
-    )
-    ax_save.set_title("Correlation Matrix of On-chain Features", color="black")
-    plt.xticks(rotation=45, ha="right", color="black")
-    plt.yticks(rotation=0, color="black")
-    
+    if st.button("Save Correlation Plot (White Background)"):
     # Enregistrer la figure dans un buffer
-    buf = io.BytesIO()
-    fig_save.savefig(buf, format="png", bbox_inches="tight", facecolor="white")
-    buf.seek(0)
-    st.download_button("Download Plot as PNG", data=buf, file_name="correlation_heatmap.png", mime="image/png")
-    
-    plt.close(fig_save)
+        buf = io.BytesIO()
+        fig_save.savefig(buf, format="png", bbox_inches="tight", facecolor="white")
+        buf.seek(0)
+        st.download_button("Download Plot as PNG", data=buf, file_name="correlation_heatmap.png", mime="image/png")
+        
+        plt.close(fig_save)
+
+
