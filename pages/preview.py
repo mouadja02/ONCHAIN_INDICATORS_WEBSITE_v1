@@ -72,7 +72,6 @@ else:
     
     # Set dark background (like in the seaborn version)
     fig.patch.set_facecolor("black")
-    fiG.patch.set_facecolor("black")
     ax.set_facecolor("black")
     
     # Display the correlation matrix using imshow with similar parameters as sns.heatmap
