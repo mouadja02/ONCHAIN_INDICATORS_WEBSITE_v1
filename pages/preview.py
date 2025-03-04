@@ -80,8 +80,8 @@ else:
     # Set ticks with white labels
     ax.set_xticks(np.arange(len(cols_for_corr)))
     ax.set_yticks(np.arange(len(cols_for_corr)))
-    ax.set_xticklabels(cols_for_corr, rotation=45, ha="right", color="white")
-    ax.set_yticklabels(cols_for_corr, color="white")
+    ax.set_xticklabels(cols_for_corr, rotation=45, ha="right", color="black")
+    ax.set_yticklabels(cols_for_corr, color="black")
     
     # Annotate each cell with the correlation value (formatted to 2 decimals)
     for i in range(len(cols_for_corr)):
