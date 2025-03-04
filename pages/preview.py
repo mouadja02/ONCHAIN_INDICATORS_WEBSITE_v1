@@ -101,40 +101,11 @@ else:
 import io
 
 ######################################
-# Plot Correlation Heatmap using Matplotlib/Seaborn
-######################################
-st.subheader("Correlation Matrix Heatmap")
-
-num_features = len(corr_matrix.columns)
-fig_width = max(8, num_features * 0.8)
-fig_height = max(6, num_features * 0.8)
-fig, ax = plt.subplots(figsize=(fig_width, fig_height))
-
-# Paramètres pour le thème sombre (affiché dans l'app)
-fig.patch.set_facecolor("black")
-ax.set_facecolor("black")
-sns.heatmap(
-    corr_matrix,
-    annot=True,
-    cmap="RdBu_r",
-    vmin=-1,
-    vmax=1,
-    square=True,
-    ax=ax,
-    fmt=".2f",
-    cbar_kws={'shrink': 0.75, 'label': 'Correlation'}
-)
-ax.set_title("Correlation Matrix of On-chain Features", color="white")
-plt.xticks(rotation=45, ha="right", color="white")
-plt.yticks(rotation=0, color="white")
-
-st.plotly_chart(fig, use_container_width=True)  # ou st.pyplot(fig) selon votre préférence
-
-######################################
 # Option to Save Plot on White Background
 ######################################
 if st.button("Save Correlation Plot (White Background)"):
-    # Créer une nouvelle figure identique mais avec fond blanc
+    fig_width = max(8, num_features * 0.8)
+    fig_height = max(6, num_features * 0.8)
     fig_save, ax_save = plt.subplots(figsize=(fig_width, fig_height))
     fig_save.patch.set_facecolor("white")
     ax_save.set_facecolor("white")
