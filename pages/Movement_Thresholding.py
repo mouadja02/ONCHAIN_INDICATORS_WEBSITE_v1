@@ -68,6 +68,15 @@ hist_start_date = st.sidebar.date_input(
 )
 hist_start_date_str = hist_start_date.strftime("%Y-%m-%d")
 
+# Slider for the number of bins in the histogram
+nbins_slider = st.sidebar.slider(
+    "Number of Bins for Histogram", 
+    min_value=10, 
+    max_value=200, 
+    value=100, 
+    step=10
+)
+
 # 4.1) Load the BTC price movement percentage from Snowflake
 query_movement = f"""
 SELECT
@@ -108,9 +117,9 @@ st.write(f"Mean Movement: {mean_val:.2f}%")
 st.write(f"Std Dev of Movement: {std_val:.2f}%")
 st.write(f"Threshold for 'Significant' set at ±{std_slider} standard deviations.")
 
-# 4.5) Plot histogram of movements
+# 4.5) Plot histogram of movements using the nbins_slider value
 fig_hist = go.Figure()
-fig_hist.add_trace(go.Histogram(x=movement_data, nbinsx=100))
+fig_hist.add_trace(go.Histogram(x=movement_data, nbinsx=nbins_slider))
 fig_hist.update_layout(
     title="Distribution of BTC Movement (%)",
     xaxis_title="BTC Movement (%)",
