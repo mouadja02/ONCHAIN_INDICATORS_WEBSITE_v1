@@ -52,17 +52,22 @@ if "assigned_colors" not in st.session_state:
 if "colors" not in st.session_state:
     st.session_state["colors"] = {}
 
+# Set color for the on-chain indicator column and BTC price if not already set.
+indicator_col = "PRICE_MOVEMENT_STATE"
+if indicator_col not in st.session_state["colors"]:
+    st.session_state["colors"][indicator_col] = st.session_state["color_palette"].pop()
+
+if "BTC_PRICE" not in st.session_state["colors"]:
+    st.session_state["colors"]["BTC_PRICE"] = st.session_state["color_palette"].pop()
 
 BTC_PRICE_TABLE = "BTC_DATA.DATA.BTC_PRICE_USD"
 BTC_PRICE_DATE_COL = "DATE"
 BTC_PRICE_VALUE_COL = "BTC_PRICE_USD"
 
-
 ######################################
 # 6) SIDEBAR Controls
 ######################################
 with st.sidebar:
-
     st.markdown("---")
     st.header("Chart Options")
     default_start_date = datetime.date(2015, 1, 1)
@@ -93,10 +98,11 @@ with st.sidebar:
     if detect_cpd:
         pen_value = st.number_input("CPD Penalty", min_value=1, max_value=200, value=10)
 
+# Determine whether BTC price should use the secondary Y-axis.
+price_secondary = False if same_axis_checkbox else True
 
 plot_container = st.container()
 with plot_container:
- 
     query = f"""
         SELECT
             DATE AS DATE,
@@ -139,55 +145,59 @@ with plot_container:
 
     # Build Plotly Figure
     fig = make_subplots(specs=[[{"secondary_y": True}]])
-    
+
     # Plot on-chain indicators
+    # Here we assume that all columns except "DATE" and BTC_PRICE_VALUE_COL are on-chain indicators.
+    indicator_cols = [col for col in merged_df.columns if col not in ["DATE", BTC_PRICE_VALUE_COL]]
+    for col in indicator_cols:
+        if chart_type_indicators == "Line":
+            fig.add_trace(
+                go.Scatter(
+                    x=merged_df["DATE"],
+                    y=merged_df[col],
+                    mode="lines",
+                    name=col,
+                    line=dict(color=st.session_state["colors"].get(col, "#FFFFFF"))
+                ),
+                secondary_y=False
+            )
+        else:
+            fig.add_trace(
+                go.Bar(
+                    x=merged_df["DATE"],
+                    y=merged_df[col],
+                    name=col,
+                    marker_color=st.session_state["colors"].get(col, "#FFFFFF")
+                ),
+                secondary_y=False
+            )
     
-    if chart_type_indicators == "Line":
-        fig.add_trace(
-            go.Scatter(
-                x=merged_df["DATE"],
-                y=merged_df[col],
-                mode="lines",
-                name=col,
-                line=dict(color=st.session_state["colors"][col])
-            ),
-            secondary_y=False
-        )
-    else:
-        fig.add_trace(
-            go.Bar(
-                x=merged_df["DATE"],
-                y=merged_df[col],
-                name=col,
-                marker_color=st.session_state["colors"][col]
-            ),
-            secondary_y=False
-        )
-    
-    
-    if chart_type_price == "Line":
-        fig.add_trace(
-            go.Scatter(
-                x=merged_df["DATE"],
-                y=merged_df[BTC_PRICE_VALUE_COL],
-                mode="lines",
-                name="BTC Price (USD)",
-                line=dict(color=st.session_state["colors"]["BTC_PRICE"])
-            ),
-            secondary_y=price_secondary
-        )
-    else:
-        fig.add_trace(
-            go.Bar(
-                x=merged_df["DATE"],
-                y=merged_df[BTC_PRICE_VALUE_COL],
-                name="BTC Price (USD)",
-                marker_color=st.session_state["colors"]["BTC_PRICE"]
-            ),
-            secondary_y=price_secondary
-        )
-    
-    if detect_cpd:
+    # Plot BTC Price if requested and available
+    if show_btc_price and BTC_PRICE_VALUE_COL in merged_df.columns:
+        if chart_type_price == "Line":
+            fig.add_trace(
+                go.Scatter(
+                    x=merged_df["DATE"],
+                    y=merged_df[BTC_PRICE_VALUE_COL],
+                    mode="lines",
+                    name="BTC Price (USD)",
+                    line=dict(color=st.session_state["colors"]["BTC_PRICE"])
+                ),
+                secondary_y=price_secondary
+            )
+        else:
+            fig.add_trace(
+                go.Bar(
+                    x=merged_df["DATE"],
+                    y=merged_df[BTC_PRICE_VALUE_COL],
+                    name="BTC Price (USD)",
+                    marker_color=st.session_state["colors"]["BTC_PRICE"]
+                ),
+                secondary_y=price_secondary
+            )
+
+    # Detect change points if selected, BTC price data exists, and change point detection is activated.
+    if detect_cpd and show_btc_price and BTC_PRICE_VALUE_COL in merged_df.columns:
         btc_series = merged_df[BTC_PRICE_VALUE_COL].dropna()
         if not btc_series.empty:
             algo = rpt.Pelt(model="rbf").fit(btc_series.values)
