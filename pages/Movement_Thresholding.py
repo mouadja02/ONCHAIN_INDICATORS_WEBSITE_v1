@@ -63,7 +63,7 @@ BTC_PRICE_VALUE_COL = "BTC_PRICE_USD"
 ######################################
 with st.sidebar:
 
-   st.markdown("---")
+    st.markdown("---")
     st.header("Chart Options")
     default_start_date = datetime.date(2015, 1, 1)
     selected_start_date = st.date_input("Start Date", value=default_start_date)
