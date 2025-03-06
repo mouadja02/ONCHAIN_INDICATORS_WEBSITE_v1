@@ -1,5 +1,6 @@
 import streamlit as st
 import pandas as pd
+import numpy as np
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 import datetime
@@ -98,9 +99,17 @@ with st.sidebar:
     if detect_cpd:
         pen_value = st.number_input("CPD Penalty", min_value=1, max_value=200, value=10)
 
+    st.markdown("---")
+    st.header("Threshold Analysis Options")
+    show_threshold = st.checkbox("Show Threshold Analysis", value=False)
+    threshold_multiplier = st.slider("Threshold Multiplier", min_value=0.5, max_value=3.0, value=1.0, step=0.1)
+
 # Determine whether BTC price should use the secondary Y-axis.
 price_secondary = False if same_axis_checkbox else True
 
+######################################
+# Main Dashboard Plot
+######################################
 plot_container = st.container()
 with plot_container:
     query = f"""
@@ -146,8 +155,8 @@ with plot_container:
     # Build Plotly Figure
     fig = make_subplots(specs=[[{"secondary_y": True}]])
 
-    # Plot on-chain indicators
-    # Here we assume that all columns except "DATE" and BTC_PRICE_VALUE_COL are on-chain indicators.
+    # Plot on-chain indicators.
+    # We assume that all columns except "DATE" and BTC_PRICE_VALUE_COL are on-chain indicators.
     indicator_cols = [col for col in merged_df.columns if col not in ["DATE", BTC_PRICE_VALUE_COL]]
     for col in indicator_cols:
         if chart_type_indicators == "Line":
@@ -172,7 +181,7 @@ with plot_container:
                 secondary_y=False
             )
     
-    # Plot BTC Price if requested and available
+    # Plot BTC Price if requested and available.
     if show_btc_price and BTC_PRICE_VALUE_COL in merged_df.columns:
         if chart_type_price == "Line":
             fig.add_trace(
@@ -207,7 +216,7 @@ with plot_container:
                     cp_date = merged_df["DATE"].iloc[cp]
                     fig.add_vline(x=cp_date, line_width=2, line_dash="dash", line_color="white")
 
-    # Set x-axis range based on start and (if activated) end date
+    # Set x-axis range based on start and (if activated) end date.
     x_range = [selected_start_date.strftime("%Y-%m-%d")]
     if selected_end_date:
         x_range.append(selected_end_date.strftime("%Y-%m-%d"))
@@ -242,3 +251,125 @@ with plot_container:
         ]
     }
     st.plotly_chart(fig, use_container_width=True, config=config)
+
+######################################
+# Threshold Analysis Section
+######################################
+if show_threshold:
+    st.markdown("---")
+    st.header("Threshold Analysis")
+
+    # Generate synthetic time series data (random walk) for demonstration
+    np.random.seed(42)
+    date_range = pd.date_range(start="2023-01-01", periods=200)
+    prices = np.cumsum(np.random.randn(200)) + 100  # random walk starting at 100
+    df_threshold = pd.DataFrame({"Date": date_range, "Price": prices})
+
+    # Compute daily percentage change
+    df_threshold["Pct_Change"] = df_threshold["Price"].pct_change()
+
+    # Compute threshold as the standard deviation of percentage changes (ignoring NaN) times the multiplier
+    base_threshold = df_threshold["Pct_Change"].std()
+    threshold_value = base_threshold * threshold_multiplier
+
+    # Classification function
+    def classify_change(change, thresh):
+        if pd.isna(change):
+            return "No Change"
+        if change >= thresh:
+            return "Increase Significantly"
+        elif change > 0:
+            return "Increase Slightly"
+        elif change <= -thresh:
+            return "Decrease Significantly"
+        elif change < 0:
+            return "Decrease Slightly"
+        else:
+            return "No Change"
+
+    # Apply classification to the percentage change column
+    df_threshold["Change_Class"] = df_threshold["Pct_Change"].apply(lambda x: classify_change(x, threshold_value))
+
+    # Define colors for each classification
+    class_colors = {
+        "Increase Significantly": "green",
+        "Increase Slightly": "lightgreen",
+        "Decrease Slightly": "orange",
+        "Decrease Significantly": "red",
+        "No Change": "gray"
+    }
+
+    # Create a Plotly figure for the Price time series with classification markers
+    fig_price = go.Figure()
+
+    # Price line
+    fig_price.add_trace(go.Scatter(
+        x=df_threshold["Date"],
+        y=df_threshold["Price"],
+        mode="lines",
+        name="Price",
+        line=dict(color="white")
+    ))
+
+    # Overlay markers by classification
+    for cl in df_threshold["Change_Class"].unique():
+        sub_df = df_threshold[df_threshold["Change_Class"] == cl]
+        fig_price.add_trace(go.Scatter(
+            x=sub_df["Date"],
+            y=sub_df["Price"],
+            mode="markers",
+            name=cl,
+            marker=dict(color=class_colors.get(cl, "blue"), size=8)
+        ))
+
+    fig_price.update_layout(
+        title="Price Series with Change Classification",
+        xaxis_title="Date",
+        yaxis_title="Price",
+        paper_bgcolor="#000000",
+        plot_bgcolor="#000000",
+        font=dict(color="#f0f2f6")
+    )
+
+    # Create a second Plotly figure for percentage changes and threshold lines
+    fig_pct = go.Figure()
+
+    # Plot percentage change
+    fig_pct.add_trace(go.Scatter(
+        x=df_threshold["Date"],
+        y=df_threshold["Pct_Change"],
+        mode="lines",
+        name="Pct Change",
+        line=dict(color="white")
+    ))
+
+    # Add threshold lines for positive and negative changes
+    fig_pct.add_trace(go.Scatter(
+        x=df_threshold["Date"],
+        y=[threshold_value] * len(df_threshold),
+        mode="lines",
+        name="Threshold (+)",
+        line=dict(dash="dash", color="green")
+    ))
+    fig_pct.add_trace(go.Scatter(
+        x=df_threshold["Date"],
+        y=[-threshold_value] * len(df_threshold),
+        mode="lines",
+        name="Threshold (-)",
+        line=dict(dash="dash", color="red")
+    ))
+
+    fig_pct.update_layout(
+        title="Daily Percentage Change with Thresholds",
+        xaxis_title="Date",
+        yaxis_title="Percentage Change",
+        paper_bgcolor="#000000",
+        plot_bgcolor="#000000",
+        font=dict(color="#f0f2f6")
+    )
+
+    # Display the threshold analysis charts in Streamlit
+    st.plotly_chart(fig_price, use_container_width=True)
+    st.plotly_chart(fig_pct, use_container_width=True)
+    
+    st.write(f"Calculated Threshold (std of pct change * multiplier): {threshold_value:.4f}")
