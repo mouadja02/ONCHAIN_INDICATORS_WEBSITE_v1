@@ -103,7 +103,7 @@ st.write(f"Threshold for 'Significant' set at ±{std_slider} standard deviations
 
 # 4.5) Plot histogram of movements
 fig_hist = go.Figure()
-fig_hist.add_trace(go.Histogram(x=movement_data, nbinsx=10))
+fig_hist.add_trace(go.Histogram(x=movement_data, nbinsx=100))
 fig_hist.update_layout(
     title="Distribution of BTC Movement (%)",
     xaxis_title="BTC Movement (%)",
