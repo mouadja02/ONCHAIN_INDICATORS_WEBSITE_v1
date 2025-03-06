@@ -6,6 +6,7 @@ from plotly.subplots import make_subplots
 import datetime
 import random
 import ruptures as rpt
+from scipy.stats import norm
 
 ######################################
 # 1) Page Configuration & Dark Theme
@@ -261,24 +262,28 @@ with plot_container:
 ######################################
 if show_threshold:
     st.markdown("---")
-    st.header("Threshold Analysis")
+    st.header("Threshold Analysis Using BTC Price Data")
 
-    # Generate synthetic time series data for threshold analysis using user-specified dates
-    n_days = (thresh_end_date - thresh_start_date).days + 1
-    date_range_th = pd.date_range(start=thresh_start_date, periods=n_days)
-    prices_th = np.cumsum(np.random.randn(n_days)) + 100  # random walk starting at 100
-    df_threshold = pd.DataFrame({"Date": date_range_th, "Price": prices_th})
+    # Use BTC price data extracted using btc_query.
+    if not df_btc.empty:
+        df_threshold = df_btc.copy()
+    else:
+        df_threshold = merged_df.copy()
 
-    # Compute daily percentage change
-    df_threshold["Pct_Change"] = df_threshold["Price"].pct_change()
+    # Ensure DATE is datetime and sorted.
+    df_threshold["DATE"] = pd.to_datetime(df_threshold["DATE"])
+    df_threshold.sort_values("DATE", inplace=True)
+    
+    # Compute daily percentage change based on BTC price.
+    df_threshold["Pct_Change"] = df_threshold[BTC_PRICE_VALUE_COL].pct_change()
 
-    # Compute statistical parameters
+    # Compute statistical parameters.
     mu = df_threshold["Pct_Change"].mean()
     sigma = df_threshold["Pct_Change"].std()
     T_up = mu + z_value * sigma
     T_down = mu - z_value * sigma
 
-    # Classification function using the statistical thresholds
+    # Classification function using statistical thresholds.
     def classify_change(change, lower, upper):
         if pd.isna(change):
             return "No Change"
@@ -293,10 +298,9 @@ if show_threshold:
         else:
             return "No Change"
 
-    # Apply classification to the percentage change column
     df_threshold["Change_Class"] = df_threshold["Pct_Change"].apply(lambda x: classify_change(x, T_down, T_up))
 
-    # Define colors for each classification
+    # Define colors for each classification.
     class_colors = {
         "Increase Significantly": "green",
         "Increase Slightly": "lightgreen",
@@ -305,80 +309,67 @@ if show_threshold:
         "No Change": "gray"
     }
 
-    # Create a Plotly figure for the Price series with classification markers
-    fig_price_th = go.Figure()
+    # Plot 1: Histogram of daily percentage changes with fitted normal PDF.
+    x_values = np.linspace(df_threshold["Pct_Change"].min(), df_threshold["Pct_Change"].max(), 100)
+    pdf_values = norm.pdf(x_values, mu, sigma)
 
-    # Price line
-    fig_price_th.add_trace(go.Scatter(
-        x=df_threshold["Date"],
-        y=df_threshold["Price"],
+    fig_hist = go.Figure()
+    fig_hist.add_trace(go.Histogram(
+        x=df_threshold["Pct_Change"],
+        histnorm='probability density',
+        name="Pct Change Histogram",
+        marker_color="white",
+        opacity=0.75
+    ))
+    fig_hist.add_trace(go.Scatter(
+        x=x_values,
+        y=pdf_values,
         mode="lines",
-        name="Price",
+        name="Fitted Normal PDF",
+        line=dict(color="red")
+    ))
+    fig_hist.update_layout(
+        title="Histogram of BTC Price Daily Percentage Changes with Fitted Normal PDF",
+        xaxis_title="Daily Percentage Change",
+        yaxis_title="Density",
+        paper_bgcolor="#000000",
+        plot_bgcolor="#000000",
+        font=dict(color="#f0f2f6")
+    )
+
+    # Plot 2: BTC Price time series with classification markers.
+    fig_price_th = go.Figure()
+    fig_price_th.add_trace(go.Scatter(
+        x=df_threshold["DATE"],
+        y=df_threshold[BTC_PRICE_VALUE_COL],
+        mode="lines",
+        name="BTC Price",
         line=dict(color="white")
     ))
-
-    # Overlay markers by classification
+    # Overlay markers by classification.
     for cl in df_threshold["Change_Class"].unique():
         sub_df = df_threshold[df_threshold["Change_Class"] == cl]
         fig_price_th.add_trace(go.Scatter(
-            x=sub_df["Date"],
-            y=sub_df["Price"],
+            x=sub_df["DATE"],
+            y=sub_df[BTC_PRICE_VALUE_COL],
             mode="markers",
             name=cl,
             marker=dict(color=class_colors.get(cl, "blue"), size=8)
         ))
-
     fig_price_th.update_layout(
-        title="Price Series with Change Classification",
+        title="BTC Price Series with Change Classification",
         xaxis_title="Date",
-        yaxis_title="Price",
+        yaxis_title="BTC Price (USD)",
         paper_bgcolor="#000000",
         plot_bgcolor="#000000",
         font=dict(color="#f0f2f6")
     )
 
-    # Create a second Plotly figure for percentage changes and threshold lines
-    fig_pct_th = go.Figure()
-
-    # Plot percentage change
-    fig_pct_th.add_trace(go.Scatter(
-        x=df_threshold["Date"],
-        y=df_threshold["Pct_Change"],
-        mode="lines",
-        name="Pct Change",
-        line=dict(color="white")
-    ))
-
-    # Add threshold lines for positive and negative changes
-    fig_pct_th.add_trace(go.Scatter(
-        x=df_threshold["Date"],
-        y=[T_up] * len(df_threshold),
-        mode="lines",
-        name="Threshold (Upper)",
-        line=dict(dash="dash", color="green")
-    ))
-    fig_pct_th.add_trace(go.Scatter(
-        x=df_threshold["Date"],
-        y=[T_down] * len(df_threshold),
-        mode="lines",
-        name="Threshold (Lower)",
-        line=dict(dash="dash", color="red")
-    ))
-
-    fig_pct_th.update_layout(
-        title="Daily Percentage Change with Statistical Thresholds",
-        xaxis_title="Date",
-        yaxis_title="Percentage Change",
-        paper_bgcolor="#000000",
-        plot_bgcolor="#000000",
-        font=dict(color="#f0f2f6")
-    )
-
-    # Display the threshold analysis charts
+    # Display the threshold analysis plots.
+    st.plotly_chart(fig_hist, use_container_width=True)
     st.plotly_chart(fig_price_th, use_container_width=True)
-    st.plotly_chart(fig_pct_th, use_container_width=True)
     
-    # Display the computed statistical parameters and model equations at the bottom
+    # Display the computed statistical parameters and model equations.
     st.markdown("### Statistical Threshold Model")
     st.markdown(f"**Mean (μ):** {mu:.6f}")
     st.markdown(f"**Standard Deviation (σ):** {sigma:.6f}")
@@ -399,4 +390,3 @@ Where:
 - \(\sigma\) is the standard deviation of the daily percentage changes.
 - \(z\) is the significance multiplier (selected above).
     """)
-
