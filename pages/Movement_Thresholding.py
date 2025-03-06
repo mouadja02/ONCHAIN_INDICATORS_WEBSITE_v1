@@ -62,22 +62,8 @@ BTC_PRICE_VALUE_COL = "BTC_PRICE_USD"
 # 6) SIDEBAR Controls
 ######################################
 with st.sidebar:
-    st.header("Select On-chain Indicator")
-    selected_table = st.selectbox(
-        "Select a Table (Metric Set)",
-        list(TABLE_DICT.keys()),
-        help="Pick which table (indicator set) to visualize."
-    )
-    table_info = TABLE_DICT[selected_table]
-    all_numeric_cols = table_info["numeric_cols"]
-    selected_cols = st.multiselect(
-        "Select Indicator(s):",
-        all_numeric_cols,
-        default=all_numeric_cols,
-        help="Pick one or more numeric columns to plot."
-    )
 
-    st.markdown("---")
+   st.markdown("---")
     st.header("Chart Options")
     default_start_date = datetime.date(2015, 1, 1)
     selected_start_date = st.date_input("Start Date", value=default_start_date)
