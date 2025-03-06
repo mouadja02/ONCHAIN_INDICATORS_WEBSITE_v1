@@ -61,15 +61,22 @@ std_slider = st.sidebar.slider(
     step=0.1
 )
 
+# Date picker for the histogram start date
+hist_start_date = st.sidebar.date_input(
+    "Histogram Start Date", 
+    value=datetime.date(2010, 7, 30)
+)
+hist_start_date_str = hist_start_date.strftime("%Y-%m-%d")
+
 # 4.1) Load the BTC price movement percentage from Snowflake
-query_movement = """
+query_movement = f"""
 SELECT
     WEEK_START,
     AVG_PRICE,
     PREV_AVG,
     (AVG_PRICE - PREV_AVG)/NULLIF(PREV_AVG, 0) * 100 AS PRICE_MOVEMENT_PERCENT
 FROM BTC_PRICE_MOVEMENT_PERCENTAGE
-WHERE PREV_AVG IS NOT NULL AND WEEK_START > '2010-07-30'
+WHERE PREV_AVG IS NOT NULL AND WEEK_START > '{hist_start_date_str}'
 """
 df_movement = session.sql(query_movement).to_pandas()
 
