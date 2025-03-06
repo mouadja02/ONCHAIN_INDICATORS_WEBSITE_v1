@@ -105,7 +105,8 @@ with st.sidebar:
     thresh_start_date = st.date_input("Threshold Analysis Start Date", value=selected_start_date, key="thresh_start")
     thresh_end_date = st.date_input("Threshold Analysis End Date", value=datetime.date.today(), key="thresh_end")
     show_threshold = st.checkbox("Show Threshold Analysis", value=False)
-    threshold_multiplier = st.slider("Threshold Multiplier", min_value=0.5, max_value=3.0, value=1.0, step=0.1)
+    # Significance level (z-value) for the statistical threshold model
+    z_value = st.slider("Significance Level (z-value)", min_value=1.0, max_value=3.0, value=1.96, step=0.01)
 
 # Determine whether BTC price should use the secondary Y-axis.
 price_secondary = False if same_axis_checkbox else True
@@ -271,19 +272,21 @@ if show_threshold:
     # Compute daily percentage change
     df_threshold["Pct_Change"] = df_threshold["Price"].pct_change()
 
-    # Compute threshold as the standard deviation of percentage changes times the multiplier
-    base_threshold = df_threshold["Pct_Change"].std()
-    threshold_value = base_threshold * threshold_multiplier
+    # Compute statistical parameters
+    mu = df_threshold["Pct_Change"].mean()
+    sigma = df_threshold["Pct_Change"].std()
+    T_up = mu + z_value * sigma
+    T_down = mu - z_value * sigma
 
-    # Classification function for changes
-    def classify_change(change, thresh):
+    # Classification function using the statistical thresholds
+    def classify_change(change, lower, upper):
         if pd.isna(change):
             return "No Change"
-        if change >= thresh:
+        if change >= upper:
             return "Increase Significantly"
         elif change > 0:
             return "Increase Slightly"
-        elif change <= -thresh:
+        elif change <= lower:
             return "Decrease Significantly"
         elif change < 0:
             return "Decrease Slightly"
@@ -291,7 +294,7 @@ if show_threshold:
             return "No Change"
 
     # Apply classification to the percentage change column
-    df_threshold["Change_Class"] = df_threshold["Pct_Change"].apply(lambda x: classify_change(x, threshold_value))
+    df_threshold["Change_Class"] = df_threshold["Pct_Change"].apply(lambda x: classify_change(x, T_down, T_up))
 
     # Define colors for each classification
     class_colors = {
@@ -349,21 +352,21 @@ if show_threshold:
     # Add threshold lines for positive and negative changes
     fig_pct_th.add_trace(go.Scatter(
         x=df_threshold["Date"],
-        y=[threshold_value] * len(df_threshold),
+        y=[T_up] * len(df_threshold),
         mode="lines",
-        name="Threshold (+)",
+        name="Threshold (Upper)",
         line=dict(dash="dash", color="green")
     ))
     fig_pct_th.add_trace(go.Scatter(
         x=df_threshold["Date"],
-        y=[-threshold_value] * len(df_threshold),
+        y=[T_down] * len(df_threshold),
         mode="lines",
-        name="Threshold (-)",
+        name="Threshold (Lower)",
         line=dict(dash="dash", color="red")
     ))
 
     fig_pct_th.update_layout(
-        title="Daily Percentage Change with Thresholds",
+        title="Daily Percentage Change with Statistical Thresholds",
         xaxis_title="Date",
         yaxis_title="Percentage Change",
         paper_bgcolor="#000000",
@@ -375,4 +378,25 @@ if show_threshold:
     st.plotly_chart(fig_price_th, use_container_width=True)
     st.plotly_chart(fig_pct_th, use_container_width=True)
     
-    st.write(f"Calculated Threshold (std of pct change * multiplier): {threshold_value:.4f}")
+    # Display the computed statistical parameters and model equations at the bottom
+    st.markdown("### Statistical Threshold Model")
+    st.markdown(f"**Mean (μ):** {mu:.6f}")
+    st.markdown(f"**Standard Deviation (σ):** {sigma:.6f}")
+    st.markdown(f"**Upper Threshold (μ + {z_value:.2f}·σ):** {T_up:.6f}")
+    st.markdown(f"**Lower Threshold (μ - {z_value:.2f}·σ):** {T_down:.6f}")
+    st.markdown(r"""
+The thresholds are computed using the following model:
+
+\[
+T_{up} = \mu + z \cdot \sigma
+\]
+\[
+T_{down} = \mu - z \cdot \sigma
+\]
+
+Where:
+- \(\mu\) is the mean of the daily percentage changes.
+- \(\sigma\) is the standard deviation of the daily percentage changes.
+- \(z\) is the significance multiplier (selected above).
+    """)
+
