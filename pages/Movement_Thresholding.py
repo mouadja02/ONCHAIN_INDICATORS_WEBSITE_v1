@@ -96,11 +96,7 @@ with st.sidebar:
 
 plot_container = st.container()
 with plot_container:
-    # Query Selected Indicator(s)
-    date_col = table_info["date_col"]
-    cols_for_query = ", ".join(selected_cols)
-    WEEK_START
-  
+ 
     query = f"""
         SELECT
             DATE AS DATE,
