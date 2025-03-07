@@ -115,11 +115,11 @@ df_btc_movement = session.sql(btc_movement_query).to_pandas()
 
 # Define mapping for five distinct states with colors and labels:
 state_color_label = {
-    2: {"color": "#ad0c00", "label": "Increase significantly"},
-    1: {"color": "#ff6f00", "label": "Moderate increase"},
+    -2: {"color": "#ad0c00", "label": "Decrease significantly"},
+    -1: {"color": "#ff6f00", "label": "Moderate decrease"},
     0: {"color": "#fffb00", "label": "Unchanged"},
-    -1: {"color": "#55ff00", "label": "Moderate decrease"},
-    -2: {"color": "#006e07", "label": "Decrease significantly"}
+    1: {"color": "#55ff00", "label": "Moderate increase"},
+    2: {"color": "#006e07", "label": "Increase significantly"}
 }
 
 ######################################
