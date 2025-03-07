@@ -77,8 +77,8 @@ TABLE_DICT = {
     },
     "EXCHANGE_FLOW": {
         "table_name": "BTC_DATA.DATA.EXCHANGE_FLOW",
-        "date_col": "DATE",
-        "numeric_cols": ["INFLOW", "OUTFLOW", "NETFLOW"]
+        "date_col": "DAY",
+        "numeric_cols": ["INFLOW_BTC", "OUTFLOW_BTC", "NETFLOW_BTC","EXCHANGE_RESERVE_BTC","INFLOW_USD", "OUTFLOW_USD", "NETFLOW_USD","EXCHANGE_RESERVE_USD"]
     },
     "HOLDER REALIZED PRICES": {
         "table_name": "BTC_DATA.DATA.HOLDER_REALIZED_PRICES",
