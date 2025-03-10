@@ -91,7 +91,7 @@ TABLE_DICT = {
         "numeric_cols": ["MVRV"]
     },
     "MVRV WITH HOLDER TYPES": {
-        "table_name": "BTC_DATA_SHARED.DATA.MVRV_WITH_HOLDER_TYPES",
+        "table_name": "BTC_DATA.DATA.MVRV_HOLDERS",
         "date_col": "DATE",
         "numeric_cols": ["STH_MVRV", "LTH_MVRV"]
     },
