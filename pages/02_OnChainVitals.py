@@ -91,9 +91,9 @@ TABLE_DICT = {
         "numeric_cols": ["MVRV"]
     },
     "MVRV WITH HOLDER TYPES": {
-        "table_name": "BTC_DATA.DATA.MVRV_WITH_HOLDER_TYPES",
+        "table_name": "BTC_DATA.DATA.MVRV_HOLDERS",
         "date_col": "DATE",
-        "numeric_cols": ["OVERALL_MVRV", "STH_MVRV", "LTH_MVRV"]
+        "numeric_cols": ["STH_MVRV", "LTH_MVRV"]
     },
     "NUPL": {
         "table_name": "BTC_DATA.DATA.NUPL",
@@ -111,9 +111,9 @@ TABLE_DICT = {
         "numeric_cols": ["SOPR"]
     },
     "SOPR WITH HOLDER TYPES": {
-        "table_name": "BTC_DATA.DATA.SOPR_WITH_HOLDER_TYPES",
+        "table_name": "BTC_DATA.DATA.SOPR_HOLDERS",
         "date_col": "DATE",
-        "numeric_cols": ["OVERALL_SOPR", "STH_SOPR", "LTH_SOPR"]
+        "numeric_cols": ["STH_SOPR", "LTH_SOPR"]
     },
     "STOCK TO FLOW": {
         "table_name": "BTC_DATA.DATA.STOCK_TO_FLOW",
