@@ -282,7 +282,7 @@ with plot_container:
     """
     if selected_end_date:
         query += f" AND CAST({date_col} AS DATE) <= '{selected_end_date}'\n"
-    query += "ORDER BY DATE"
+    query += "ORDER BY DATE ASC"
 
     df_indicators = session.sql(query).to_pandas()
 
@@ -299,7 +299,7 @@ with plot_container:
         """
         if selected_end_date:
             btc_query += f" AND CAST({BTC_PRICE_DATE_COL} AS DATE) <= '{selected_end_date}'\n"
-        btc_query += "ORDER BY DATE"
+        btc_query += "ORDER BY DATE ASC"
         df_btc = session.sql(btc_query).to_pandas()
 
     # 8.3) Merge data
