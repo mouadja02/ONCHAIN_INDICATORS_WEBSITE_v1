@@ -180,7 +180,7 @@ with st.sidebar:
     default_start_date = datetime.date(2015, 1, 1)
     selected_start_date = st.date_input("Start Date", value=default_start_date)
     
-    # End Date Option - Disabled by default
+    # End Date Option
     activate_end_date = st.checkbox("Activate End Date", value=False)
     if activate_end_date:
         default_end_date = datetime.date.today()
@@ -201,9 +201,14 @@ with st.sidebar:
     same_axis_checkbox = st.checkbox("Plot BTC Price on same Y-axis?", value=False)
     chart_type_price = st.radio("BTC Price Chart Type", ["Line", "Bars"], index=0)
     scale_option_price = st.radio("BTC Price Axis", ["Linear", "Log"], index=0)
+
+    # Enable CPD & Normalization
     detect_cpd = st.checkbox("Detect BTC Price Change Points?", value=False)
     if detect_cpd:
         pen_value = st.number_input("CPD Penalty", min_value=1, max_value=200, value=10)
+        apply_normalization = st.checkbox("Apply Z-Score Normalization (per CPD segment)?", value=True)
+    else:
+        apply_normalization = False
 
 ######################################
 # 7) Assign Colors for Each Selected Indicator
@@ -235,7 +240,7 @@ if show_btc_price:
 ######################################
 plot_container = st.container()
 with plot_container:
-    # Query Selected Indicator(s)
+    # 8.1) Query Selected Indicator(s)
     date_col = table_info["date_col"]
     cols_for_query = ", ".join(selected_cols)
     
@@ -254,7 +259,7 @@ with plot_container:
     df_indicators = session.sql(query).to_pandas()
     df_indicators.rename(columns={"DATE": "DATE"}, inplace=True)
 
-    # Query BTC Price if requested
+    # 8.2) Query BTC Price if requested
     df_btc = pd.DataFrame()
     if show_btc_price:
         btc_query = f"""
@@ -270,7 +275,7 @@ with plot_container:
         btc_query += "ORDER BY DATE"
         df_btc = session.sql(btc_query).to_pandas()
 
-    # Merge data using an outer join so all dates are captured
+    # 8.3) Merge data using an outer join so all dates are captured
     if show_btc_price and not df_btc.empty:
         merged_df = pd.merge(df_btc, df_indicators, on="DATE", how="outer")
     else:
@@ -281,33 +286,61 @@ with plot_container:
         st.warning("No data returned. Check your date range or table selection.")
         st.stop()
 
-    # Calculate EMA if requested
+    # 8.4) If detect_cpd is enabled, find change points on BTC Price
+    change_points = []
+    if detect_cpd and show_btc_price and BTC_PRICE_VALUE_COL in merged_df.columns:
+        btc_series = merged_df[BTC_PRICE_VALUE_COL].dropna().values
+        if len(btc_series) > 2:  # need enough data points
+            algo = rpt.Pelt(model="rbf").fit(btc_series)
+            change_points = algo.predict(pen=pen_value)
+        else:
+            st.warning("Not enough BTC Price data for change point detection.")
+    
+    # 8.5) Z-score normalization per segment if requested
+    #     We'll do this before computing EMA, so the charts reflect normalized data.
+    if apply_normalization and change_points:
+        # Ensure we handle segments from 0 to the end of merged_df.
+        # By default, 'predict' includes the final index as a change point.
+        prev_cp = 0
+        for cp in change_points:
+            # Segment range in 0-based indexing: [prev_cp, cp)
+            seg_indices = merged_df.index[prev_cp:cp]
+            
+            # For both BTC price and selected indicators
+            for col in [BTC_PRICE_VALUE_COL] + selected_cols:
+                if col in merged_df.columns:
+                    seg_data = merged_df.loc[seg_indices, col]
+                    mean_val = seg_data.mean()
+                    std_val = seg_data.std()
+                    if std_val != 0:
+                        merged_df.loc[seg_indices, col] = (seg_data - mean_val) / std_val
+            
+            prev_cp = cp
+
+    # 8.6) Calculate EMA if requested (on normalized or raw data, depending on user steps)
     if show_ema:
-        # For each indicator, compute EMA; also compute EMA for BTC Price if applicable.
         for col in selected_cols:
-            merged_df[f"EMA_{col}"] = merged_df[col].ewm(span=ema_period).mean()
-        if show_btc_price and not df_btc.empty:
+            if col in merged_df.columns:
+                merged_df[f"EMA_{col}"] = merged_df[col].ewm(span=ema_period).mean()
+        if show_btc_price and not df_btc.empty and BTC_PRICE_VALUE_COL in merged_df.columns:
             merged_df["EMA_BTC_PRICE"] = merged_df[BTC_PRICE_VALUE_COL].ewm(span=ema_period).mean()
 
-    # Build Plotly Figure
+    # 8.7) Build Plotly Figure
     fig = make_subplots(specs=[[{"secondary_y": True}]])
     
-    # Plot on-chain indicators
+    # --- Plot On-chain Indicators ---
     for col in selected_cols:
-        if show_ema:
-            # When EMA is activated, plot only the EMA curve with full (solid) line.
-            ema_col = f"EMA_{col}"
-            if ema_col in merged_df.columns:
-                fig.add_trace(
-                    go.Scatter(
-                        x=merged_df["DATE"],
-                        y=merged_df[ema_col],
-                        mode="lines",
-                        name=f"EMA({ema_period}) - {col}",
-                        line=dict(color=st.session_state["colors"][col])
-                    ),
-                    secondary_y=False
-                )
+        if show_ema and f"EMA_{col}" in merged_df.columns:
+            fig.add_trace(
+                go.Scatter(
+                    x=merged_df["DATE"],
+                    y=merged_df[f"EMA_{col}"],
+                    mode="lines",
+                    name=f"EMA({ema_period}) - {col}",
+                    line=dict(color=st.session_state["colors"][col])
+                ),
+                secondary_y=False
+            )
         else:
             if chart_type_indicators == "Line":
                 fig.add_trace(
@@ -331,11 +364,10 @@ with plot_container:
                     secondary_y=False
                 )
 
-    # Plot BTC Price on secondary (or same) axis
-    if show_btc_price and not df_btc.empty:
+    # --- Plot BTC Price ---
+    if show_btc_price and not df_btc.empty and BTC_PRICE_VALUE_COL in merged_df.columns:
         price_secondary = not same_axis_checkbox
-        if show_ema:
-            # Plot EMA of BTC Price instead of the raw curve
+        if show_ema and "EMA_BTC_PRICE" in merged_df.columns:
             fig.add_trace(
                 go.Scatter(
                     x=merged_df["DATE"],
@@ -368,19 +400,15 @@ with plot_container:
                     ),
                     secondary_y=price_secondary
                 )
-    
-            # CPD: detect change points on BTC Price if enabled
-            if detect_cpd:
-                btc_series = merged_df[BTC_PRICE_VALUE_COL].dropna()
-                if not btc_series.empty:
-                    algo = rpt.Pelt(model="rbf").fit(btc_series.values)
-                    change_points = algo.predict(pen=pen_value)
-                    for cp in change_points:
-                        if cp < len(merged_df):
-                            cp_date = merged_df["DATE"].iloc[cp]
-                            fig.add_vline(x=cp_date, line_width=2, line_dash="dash", line_color="white")
+        
+        # Visualize the CPD lines on the chart
+        if detect_cpd and change_points:
+            for cp in change_points:
+                if cp < len(merged_df):
+                    cp_date = merged_df["DATE"].iloc[cp]
+                    fig.add_vline(x=cp_date, line_width=2, line_dash="dash", line_color="white")
 
-    # Set x-axis range based on start and (if activated) end date
+    # 8.8) Set X-axis range based on start/end date
     x_range = [selected_start_date.strftime("%Y-%m-%d")]
     if selected_end_date:
         x_range.append(selected_end_date.strftime("%Y-%m-%d"))
@@ -388,6 +416,7 @@ with plot_container:
         x_range.append(merged_df["DATE"].max().strftime("%Y-%m-%d"))
     fig.update_xaxes(title_text="Date", gridcolor="#4f5b66", range=x_range)
 
+    # 8.9) Layout Settings
     fig.update_layout(
         paper_bgcolor="#000000",
         plot_bgcolor="#000000",
