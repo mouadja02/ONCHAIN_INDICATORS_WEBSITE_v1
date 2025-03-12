@@ -219,9 +219,11 @@ with st.sidebar:
     st.write("Choose which columns to normalize (including BTC price if you want).")
     
     # Gather columns to possibly normalize
-    columns_for_normalization = list(selected_cols)
     if show_btc_price:
+        columns_for_normalization = list(selected_cols)
         columns_for_normalization = [BTC_PRICE_VALUE_COL] + columns_for_normalization
+    else:
+        columns_for_normalization = list(selected_cols)
 
     NORMALIZATION_METHODS = ["None", "Z-Score", "Min-Max", "Robust", "Log Transform"]
 
