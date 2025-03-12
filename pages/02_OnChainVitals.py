@@ -348,24 +348,16 @@ with plot_container:
             s = robust_scale(s)
         elif method == "Log Transform":
             s = log_transform(s)
-        # "None" or unknown => do nothing
         return s
 
-    # ========== 8.5) Apply Normalization (Segmented if CPD is on) ==========
-    # We'll normalize each column according to the user's selection in col_to_norm_method.
-    # If CPD is on, do it segment by segment for columns that have a method != "None".
-    # If CPD is off, do the entire series at once.
-
+    # ========== 8.5) Apply Normalization ==========
+    # If CPD is enabled and change points are found, apply normalization per segment.
+    # Otherwise, normalize the full dataset.
     def normalize_per_segment(df: pd.DataFrame, segments: list, columns_to_normalize: dict):
         """
         Applies the chosen normalization method segment by segment for the columns
         specified in 'columns_to_normalize'.
-        
-        :param df: The merged DataFrame (sorted by DATE)
-        :param segments: List of change points (indices). Typically from ruptures 'predict'
-        :param columns_to_normalize: dict {col_name: normalization_method}
         """
-        # Ensure we have a segment from start=0
         prev_cp = 0
         for cp in segments:
             seg_indices = df.index[prev_cp:cp]
@@ -379,10 +371,9 @@ with plot_container:
     }
 
     if detect_cpd and change_points:
-        # Segment-based normalization for columns that have a chosen method
         normalize_per_segment(merged_df, change_points, columns_with_methods)
     else:
-        # Global normalization (no CPD segmentation)
+        # Global normalization on the full dataset
         for col, method in columns_with_methods.items():
             if col in merged_df.columns and method != "None":
                 merged_df[col] = apply_normalization(merged_df[col], method)
@@ -471,7 +462,7 @@ with plot_container:
                     secondary_y=price_secondary
                 )
         
-        # --- Visualize the CPD lines on the chart
+        # --- Visualize the CPD lines on the chart ---
         if detect_cpd and change_points:
             for cp in change_points:
                 if cp < len(merged_df):
