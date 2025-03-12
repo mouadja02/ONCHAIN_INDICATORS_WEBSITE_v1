@@ -79,7 +79,10 @@ TABLE_DICT = {
     "EXCHANGE_FLOW": {
         "table_name": "BTC_DATA.DATA.EXCHANGE_FLOW",
         "date_col": "DAY",
-        "numeric_cols": ["INFLOW_BTC", "OUTFLOW_BTC", "NETFLOW_BTC","EXCHANGE_RESERVE_BTC","INFLOW_USD", "OUTFLOW_USD", "NETFLOW_USD","EXCHANGE_RESERVE_USD"]
+        "numeric_cols": [
+            "INFLOW_BTC", "OUTFLOW_BTC", "NETFLOW_BTC","EXCHANGE_RESERVE_BTC",
+            "INFLOW_USD", "OUTFLOW_USD", "NETFLOW_USD","EXCHANGE_RESERVE_USD"
+        ]
     },
     "HOLDER REALIZED PRICES": {
         "table_name": "BTC_DATA.DATA.HOLDER_REALIZED_PRICES",
@@ -119,7 +122,10 @@ TABLE_DICT = {
     "STOCK TO FLOW": {
         "table_name": "BTC_DATA.DATA.STOCK_TO_FLOW",
         "date_col": "DATE",
-        "numeric_cols": ["STOCK", "FLOW", "AVG_RATIO_365", "AVG_RATIO_463", "MODEL_PRICE_365", "MODEL_PRICE_463", "MODEL_VARIANCE"]
+        "numeric_cols": [
+            "STOCK", "FLOW", "AVG_RATIO_365", "AVG_RATIO_463", 
+            "MODEL_PRICE_365", "MODEL_PRICE_463", "MODEL_VARIANCE"
+        ]
     },
     "TX COUNT": {
         "table_name": "BTC_DATA.DATA.TX_COUNT",
@@ -140,10 +146,7 @@ TABLE_DICT = {
         "table_name": "BTC_DATA.DATA.PUELL_MULTIPLE",
         "date_col": "DATE",
         "numeric_cols": [
-            "MINTED_BTC",
-            "DAILY_ISSUANCE_USD",
-            "MA_365_ISSUANCE_USD",
-            "PUELL_MULTIPLE"
+            "MINTED_BTC", "DAILY_ISSUANCE_USD", "MA_365_ISSUANCE_USD", "PUELL_MULTIPLE"
         ]
     },
 }
@@ -207,29 +210,6 @@ with st.sidebar:
     detect_cpd = st.checkbox("Detect BTC Price Change Points?", value=False)
     if detect_cpd:
         pen_value = st.number_input("CPD Penalty", min_value=1, max_value=200, value=10)
-
-    # Normalization Options
-    st.markdown("---")
-    st.header("Normalization")
-    st.write("Choose which columns to normalize (including BTC price if you want).")
-    
-    # Gather columns to possibly normalize (btc price + selected_cols if show_btc_price)
-    columns_for_normalization = list(selected_cols)
-    if show_btc_price:
-        columns_for_normalization = [BTC_PRICE_VALUE_COL] + columns_for_normalization
-
-    # Define available normalization methods
-    NORMALIZATION_METHODS = ["None", "Z-Score", "Min-Max", "Robust", "Log Transform"]
-
-    # We'll store the user's choices in a dict: {column: method}
-    col_to_norm_method = {}
-    for col in columns_for_normalization:
-        method = st.selectbox(
-            f"Normalization method for {col}",
-            NORMALIZATION_METHODS,
-            index=0  # default "None"
-        )
-        col_to_norm_method[col] = method
 
 ######################################
 # 7) Assign Colors for Each Selected Indicator
@@ -307,87 +287,24 @@ with plot_container:
         st.warning("No data returned. Check your date range or table selection.")
         st.stop()
 
-    # 8.4) If detect_cpd is enabled, find change points on BTC Price
-    change_points = []
+    # 8.4) CPD: detect change points ONLY on the date range data
+    # because merged_df is already filtered by the chosen date range.
+    # We'll do CPD on the BTC_PRICE within that range if detect_cpd is True.
     if detect_cpd and show_btc_price and BTC_PRICE_VALUE_COL in merged_df.columns:
         btc_series = merged_df[BTC_PRICE_VALUE_COL].dropna().values
-        if len(btc_series) > 2:  # need enough data for CPD
+        change_points = []
+        if len(btc_series) > 2:
             algo = rpt.Pelt(model="rbf").fit(btc_series)
             change_points = algo.predict(pen=pen_value)
         else:
             st.warning("Not enough BTC Price data for change point detection.")
-    
-    # ========== HELPER FUNCTIONS FOR NORMALIZATION ==========
-    def z_score(series: pd.Series):
-        mu = series.mean()
-        sigma = series.std()
-        return (series - mu) / sigma if sigma != 0 else series
-
-    def min_max(series: pd.Series):
-        min_val = series.min()
-        max_val = series.max()
-        return (series - min_val) / (max_val - min_val) if max_val != min_val else series
-
-    def robust_scale(series: pd.Series):
-        median_val = series.median()
-        iqr = series.quantile(0.75) - series.quantile(0.25)
-        return (series - median_val) / iqr if iqr != 0 else series
-
-    def log_transform(series: pd.Series):
-        # Add small constant to avoid log(0)
-        return np.log(series + 1e-9).replace(-np.inf, np.nan)
-
-    def apply_normalization(series: pd.Series, method: str) -> pd.Series:
-        """Apply the chosen normalization method to a pandas Series."""
-        s = series.copy()
-        if method == "Z-Score":
-            s = z_score(s)
-        elif method == "Min-Max":
-            s = min_max(s)
-        elif method == "Robust":
-            s = robust_scale(s)
-        elif method == "Log Transform":
-            s = log_transform(s)
-        # "None" or unknown => do nothing
-        return s
-
-    # ========== 8.5) Apply Normalization (Segmented if CPD is on) ==========
-    # We'll normalize each column according to the user's selection in col_to_norm_method.
-    # If CPD is on, do it segment by segment for columns that have a method != "None".
-    # If CPD is off, do the entire series at once.
-
-    def normalize_per_segment(df: pd.DataFrame, segments: list, columns_to_normalize: dict):
-        """
-        Applies the chosen normalization method segment by segment for the columns
-        specified in 'columns_to_normalize'.
-        
-        :param df: The merged DataFrame (sorted by DATE)
-        :param segments: List of change points (indices). Typically from ruptures 'predict'
-        :param columns_to_normalize: dict {col_name: normalization_method}
-        """
-        # Ensure we have a segment from start=0
-        prev_cp = 0
-        for cp in segments:
-            seg_indices = df.index[prev_cp:cp]
-            for col, method in columns_to_normalize.items():
-                if (col in df.columns) and (method != "None"):
-                    df.loc[seg_indices, col] = apply_normalization(df.loc[seg_indices, col], method)
-            prev_cp = cp
-
-    columns_with_methods = {
-        col: col_to_norm_method[col] for col in col_to_norm_method if col_to_norm_method[col] != "None"
-    }
-
-    if detect_cpd and change_points:
-        # Segment-based normalization for columns that have a chosen method
-        normalize_per_segment(merged_df, change_points, columns_with_methods)
     else:
-        # Global normalization (no CPD segmentation)
-        for col, method in columns_with_methods.items():
-            if col in merged_df.columns and method != "None":
-                merged_df[col] = apply_normalization(merged_df[col], method)
+        change_points = []
 
-    # ========== 8.6) Calculate EMA if requested ==========
+    # Additional steps like normalization or segmentation can be done here
+    # for each CPD-defined interval, if desired.
+
+    # 8.5) Calculate EMA if requested
     if show_ema:
         for col in selected_cols:
             if col in merged_df.columns:
@@ -395,10 +312,10 @@ with plot_container:
         if show_btc_price and not df_btc.empty and BTC_PRICE_VALUE_COL in merged_df.columns:
             merged_df["EMA_BTC_PRICE"] = merged_df[BTC_PRICE_VALUE_COL].ewm(span=ema_period).mean()
 
-    # ========== 8.7) Build Plotly Figure ==========
+    # 8.6) Build Plotly Figure
     fig = make_subplots(specs=[[{"secondary_y": True}]])
     
-    # --- Plot On-chain Indicators ---
+    # --- Plot on-chain Indicators ---
     for col in selected_cols:
         if show_ema and f"EMA_{col}" in merged_df.columns:
             fig.add_trace(
@@ -470,15 +387,15 @@ with plot_container:
                     ),
                     secondary_y=price_secondary
                 )
-        
-        # --- Visualize the CPD lines on the chart
+
+        # Plot CPD lines if detected
         if detect_cpd and change_points:
             for cp in change_points:
                 if cp < len(merged_df):
                     cp_date = merged_df["DATE"].iloc[cp]
                     fig.add_vline(x=cp_date, line_width=2, line_dash="dash", line_color="white")
 
-    # ========== 8.8) Set X-axis range ==========
+    # 8.7) Set X-axis range based on start/end date
     x_range = [selected_start_date.strftime("%Y-%m-%d")]
     if selected_end_date:
         x_range.append(selected_end_date.strftime("%Y-%m-%d"))
@@ -486,7 +403,7 @@ with plot_container:
         x_range.append(merged_df["DATE"].max().strftime("%Y-%m-%d"))
     fig.update_xaxes(title_text="Date", gridcolor="#4f5b66", range=x_range)
 
-    # ========== 8.9) Layout Settings ==========
+    # 8.8) Layout Settings
     fig.update_layout(
         paper_bgcolor="#000000",
         plot_bgcolor="#000000",
