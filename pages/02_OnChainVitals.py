@@ -218,14 +218,14 @@ with st.sidebar:
     st.header("Normalization")
     st.write("Choose which columns to normalize (including BTC price if you want).")
     
-    # Gather columns to possibly normalize (BTC price + selected_cols if show_btc_price)
+    # Gather columns to possibly normalize
     columns_for_normalization = list(selected_cols)
     if show_btc_price:
         columns_for_normalization = [BTC_PRICE_VALUE_COL] + columns_for_normalization
 
     NORMALIZATION_METHODS = ["None", "Z-Score", "Min-Max", "Robust", "Log Transform"]
 
-    # We'll store the user's choices in a dict: {column: method}
+    # Dictionary: {column: method}
     col_to_norm_method = {}
     for col in columns_for_normalization:
         method = st.selectbox(
@@ -242,6 +242,7 @@ if not selected_cols:
     st.warning("Please select at least one indicator column.")
     st.stop()
 
+# Assign or pick colors for each selected indicator
 for i, col in enumerate(selected_cols):
     if col not in st.session_state["assigned_colors"]:
         color_assigned = st.session_state["color_palette"][i % len(st.session_state["color_palette"])]
@@ -251,6 +252,7 @@ for i, col in enumerate(selected_cols):
     st.session_state["assigned_colors"][col] = picked_color
     st.session_state["colors"][col] = picked_color
 
+# Assign/pick color for BTC Price
 if show_btc_price:
     if "BTC_PRICE" not in st.session_state["assigned_colors"]:
         idx = len(selected_cols) % len(st.session_state["color_palette"])
@@ -269,7 +271,7 @@ with plot_container:
     date_col = table_info["date_col"]
     cols_for_query = ", ".join(selected_cols)
     
-    # Build query with date range. If end date is activated, add an upper bound.
+    # Build the main indicator query
     query = f"""
         SELECT
             CAST({date_col} AS DATE) AS DATE,
@@ -280,9 +282,8 @@ with plot_container:
     if selected_end_date:
         query += f" AND CAST({date_col} AS DATE) <= '{selected_end_date}'\n"
     query += "ORDER BY DATE"
-    
+
     df_indicators = session.sql(query).to_pandas()
-    df_indicators.rename(columns={"DATE": "DATE"}, inplace=True)
 
     # 8.2) Query BTC Price if requested
     df_btc = pd.DataFrame()
@@ -300,7 +301,7 @@ with plot_container:
         btc_query += "ORDER BY DATE"
         df_btc = session.sql(btc_query).to_pandas()
 
-    # 8.3) Merge data using an outer join so all dates are captured
+    # 8.3) Merge data
     if show_btc_price and not df_btc.empty:
         merged_df = pd.merge(df_btc, df_indicators, on="DATE", how="outer")
     else:
@@ -315,6 +316,7 @@ with plot_container:
     change_points = []
     if detect_cpd and show_btc_price and BTC_PRICE_VALUE_COL in merged_df.columns:
         btc_series = merged_df[BTC_PRICE_VALUE_COL].dropna().values
+        # Only run CPD if there's enough data
         if len(btc_series) > 2:
             algo = rpt.Pelt(model="rbf").fit(btc_series)
             change_points = algo.predict(pen=pen_value)
@@ -339,7 +341,8 @@ with plot_container:
 
     def log_transform(series: pd.Series):
         # Add small constant to avoid log(0)
-        return np.log(series + 1e-9).replace(-np.inf, np.nan)
+        shifted = series + 1e-9
+        return np.log(shifted).replace(-np.inf, np.nan)
 
     def apply_normalization(series: pd.Series, method: str) -> pd.Series:
         s = series.copy()
@@ -353,42 +356,29 @@ with plot_container:
             s = log_transform(s)
         return s
 
-    # --- 8.5) Apply Normalization ---
-    # We'll normalize each column according to the user's selection in col_to_norm_method.
-    # If CPD is enabled AND we have valid change_points -> segment-based normalization
-    # else -> global normalization on the entire date range for that column.
-
-    def normalize_per_segment(df: pd.DataFrame, segments: list, columns_to_normalize: dict):
-        """
-        Applies the chosen normalization method segment by segment for the columns
-        specified in 'columns_to_normalize'.
-
-        :param df: The merged DataFrame (sorted by DATE)
-        :param segments: List of CPD indices from ruptures 'predict'
-        :param columns_to_normalize: dict {col_name: normalization_method}
-        """
-        prev_cp = 0
-        for cp in segments:
-            seg_indices = df.index[prev_cp:cp]
-            for col, method in columns_to_normalize.items():
-                if col in df.columns and method != "None":
-                    seg_data = df.loc[seg_indices, col]
-                    df.loc[seg_indices, col] = apply_normalization(seg_data, method)
-            prev_cp = cp
-
-    # Build a dict of columns that actually need normalization
+    # 8.5) Apply Normalization
+    # Build a dict for columns that actually need normalization
     columns_with_methods = {
         c: col_to_norm_method[c] for c in col_to_norm_method if col_to_norm_method[c] != "None"
     }
 
+    # Segment-based if CPD is on, else global
+    def normalize_per_segment(df: pd.DataFrame, segments: list, columns_to_normalize: dict):
+        prev_cp = 0
+        for cp in segments:
+            seg_indices = df.index[prev_cp:cp]
+            for col, method in columns_to_normalize.items():
+                if col in df.columns:
+                    df.loc[seg_indices, col] = apply_normalization(df.loc[seg_indices, col], method)
+            prev_cp = cp
+
     if detect_cpd and change_points:
-        # Segment-based normalization for columns with chosen method
+        # Segment-based normalization
         normalize_per_segment(merged_df, change_points, columns_with_methods)
     else:
-        # Global normalization
+        # Global normalization over the entire date range
         for col, method in columns_with_methods.items():
-            if col in merged_df.columns and method != "None":
-                print("I am normalizing this thing")
+            if col in merged_df.columns:
                 merged_df[col] = apply_normalization(merged_df[col], method)
 
     # 8.6) Calculate EMA if requested
@@ -396,14 +386,15 @@ with plot_container:
         for col in selected_cols:
             if col in merged_df.columns:
                 merged_df[f"EMA_{col}"] = merged_df[col].ewm(span=ema_period).mean()
-        if show_btc_price and not df_btc.empty and BTC_PRICE_VALUE_COL in merged_df.columns:
+        if show_btc_price and BTC_PRICE_VALUE_COL in merged_df.columns:
             merged_df["EMA_BTC_PRICE"] = merged_df[BTC_PRICE_VALUE_COL].ewm(span=ema_period).mean()
 
     # 8.7) Build Plotly Figure
     fig = make_subplots(specs=[[{"secondary_y": True}]])
-    
+
     # --- Plot On-chain Indicators ---
     for col in selected_cols:
+        # If user chose to plot the EMA of each indicator
         if show_ema and f"EMA_{col}" in merged_df.columns:
             fig.add_trace(
                 go.Scatter(
@@ -439,7 +430,7 @@ with plot_container:
                 )
 
     # --- Plot BTC Price ---
-    if show_btc_price and not df_btc.empty and BTC_PRICE_VALUE_COL in merged_df.columns:
+    if show_btc_price and BTC_PRICE_VALUE_COL in merged_df.columns:
         price_secondary = not same_axis_checkbox
         if show_ema and "EMA_BTC_PRICE" in merged_df.columns:
             fig.add_trace(
@@ -475,7 +466,7 @@ with plot_container:
                     secondary_y=price_secondary
                 )
         
-        # --- Visualize CPD lines on the chart
+        # --- Visualize CPD lines ---
         if detect_cpd and change_points:
             for cp in change_points:
                 if cp < len(merged_df):
@@ -483,19 +474,20 @@ with plot_container:
                     fig.add_vline(x=cp_date, line_width=2, line_dash="dash", line_color="white")
 
     # 8.8) Set X-axis range
-    x_range = [selected_start_date.strftime("%Y-%m-%d")]
+    x_range = [merged_df["DATE"].min(), merged_df["DATE"].max()]
+    # If user has manually chosen an end date, we can force that range
+    # but typically letting Plotly auto-range can be fine. 
+    # We'll just ensure it starts from selected_start_date:
     if selected_end_date:
-        x_range.append(selected_end_date.strftime("%Y-%m-%d"))
-    else:
-        x_range.append(merged_df["DATE"].max().strftime("%Y-%m-%d"))
+        x_range = [selected_start_date, selected_end_date]
 
-    fig.update_xaxes(title_text="Date", gridcolor="#4f5b66", range=x_range)
+    fig.update_xaxes(title_text="Date", gridcolor="#4f5b66", range=[str(x_range[0]), str(x_range[1])])
 
     # 8.9) Layout Settings
     fig.update_layout(
         paper_bgcolor="#000000",
         plot_bgcolor="#000000",
-        title=f"{selected_table} vs BTC Price" if show_btc_price else f"{selected_table}", 
+        title=f"{selected_table} vs BTC Price" if show_btc_price else f"{selected_table}",
         hovermode="x unified",
         font=dict(color="#f0f2f6"),
         legend=dict(x=0, y=1.05, orientation="h", bgcolor="rgba(0,0,0,0)")
