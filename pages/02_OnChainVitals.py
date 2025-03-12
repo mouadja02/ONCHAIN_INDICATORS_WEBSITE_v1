@@ -218,7 +218,7 @@ with st.sidebar:
     st.header("Normalization")
     st.write("Choose which columns to normalize (including BTC price if you want).")
     
-    # Gather columns to possibly normalize (btc price + selected_cols if show_btc_price)
+    # Gather columns to possibly normalize (BTC price + selected_cols if show_btc_price)
     columns_for_normalization = list(selected_cols)
     if show_btc_price:
         columns_for_normalization = [BTC_PRICE_VALUE_COL] + columns_for_normalization
@@ -259,7 +259,6 @@ if show_btc_price:
     picked_btc_color = st.color_picker("Color for BTC Price", default_btc_color)
     st.session_state["assigned_colors"]["BTC_PRICE"] = picked_btc_color
     st.session_state["colors"]["BTC_PRICE"] = picked_btc_color
-
 
 ######################################
 # 8) MAIN INDICATORS CHART
@@ -355,7 +354,7 @@ with plot_container:
         return s
 
     # --- 8.5) Apply Normalization ---
-    # We'll normalize each column according to user's selection in col_to_norm_method.
+    # We'll normalize each column according to the user's selection in col_to_norm_method.
     # If CPD is enabled AND we have valid change_points -> segment-based normalization
     # else -> global normalization on the entire date range for that column.
 
@@ -363,7 +362,7 @@ with plot_container:
         """
         Applies the chosen normalization method segment by segment for the columns
         specified in 'columns_to_normalize'.
-        
+
         :param df: The merged DataFrame (sorted by DATE)
         :param segments: List of CPD indices from ruptures 'predict'
         :param columns_to_normalize: dict {col_name: normalization_method}
@@ -488,6 +487,7 @@ with plot_container:
         x_range.append(selected_end_date.strftime("%Y-%m-%d"))
     else:
         x_range.append(merged_df["DATE"].max().strftime("%Y-%m-%d"))
+
     fig.update_xaxes(title_text="Date", gridcolor="#4f5b66", range=x_range)
 
     # 8.9) Layout Settings
@@ -515,7 +515,8 @@ with plot_container:
     config = {
         'editable': True,
         'modeBarButtonsToAdd': [
-            'drawline', 'drawopenpath', 'drawclosedpath', 'drawcircle', 'drawrect', 'eraseshape'
+            'drawline', 'drawopenpath', 'drawclosedpath',
+            'drawcircle', 'drawrect', 'eraseshape'
         ]
     }
     st.plotly_chart(fig, use_container_width=True, config=config)
