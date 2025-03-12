@@ -388,6 +388,7 @@ with plot_container:
         # Global normalization
         for col, method in columns_with_methods.items():
             if col in merged_df.columns and method != "None":
+                print("I am normalizing this thing")
                 merged_df[col] = apply_normalization(merged_df[col], method)
 
     # 8.6) Calculate EMA if requested
