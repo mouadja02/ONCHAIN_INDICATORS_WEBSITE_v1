@@ -220,8 +220,7 @@ with st.sidebar:
     
     # Gather columns to possibly normalize
     if show_btc_price:
-        columns_for_normalization = list(selected_cols)
-        columns_for_normalization = [BTC_PRICE_VALUE_COL] + columns_for_normalization
+        columns_for_normalization = [BTC_PRICE_VALUE_COL] + list(selected_cols)
     else:
         columns_for_normalization = list(selected_cols)
 
@@ -381,7 +380,8 @@ with plot_container:
         # Global normalization over the entire date range
         for col, method in columns_with_methods.items():
             if col in merged_df.columns:
-                merged_df[col] = apply_normalization(merged_df[col], method)
+                new_col = apply_normalization(merged_df[col], method)
+                merged_df[col] = new_col
 
     # 8.6) Calculate EMA if requested
     if show_ema:
