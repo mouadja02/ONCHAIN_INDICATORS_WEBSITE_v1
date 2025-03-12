@@ -79,10 +79,7 @@ TABLE_DICT = {
     "EXCHANGE_FLOW": {
         "table_name": "BTC_DATA.DATA.EXCHANGE_FLOW",
         "date_col": "DAY",
-        "numeric_cols": [
-            "INFLOW_BTC", "OUTFLOW_BTC", "NETFLOW_BTC","EXCHANGE_RESERVE_BTC",
-            "INFLOW_USD", "OUTFLOW_USD", "NETFLOW_USD","EXCHANGE_RESERVE_USD"
-        ]
+        "numeric_cols": ["INFLOW_BTC", "OUTFLOW_BTC", "NETFLOW_BTC","EXCHANGE_RESERVE_BTC","INFLOW_USD", "OUTFLOW_USD", "NETFLOW_USD","EXCHANGE_RESERVE_USD"]
     },
     "HOLDER REALIZED PRICES": {
         "table_name": "BTC_DATA.DATA.HOLDER_REALIZED_PRICES",
@@ -122,10 +119,7 @@ TABLE_DICT = {
     "STOCK TO FLOW": {
         "table_name": "BTC_DATA.DATA.STOCK_TO_FLOW",
         "date_col": "DATE",
-        "numeric_cols": [
-            "STOCK", "FLOW", "AVG_RATIO_365", "AVG_RATIO_463", 
-            "MODEL_PRICE_365", "MODEL_PRICE_463", "MODEL_VARIANCE"
-        ]
+        "numeric_cols": ["STOCK", "FLOW", "AVG_RATIO_365", "AVG_RATIO_463", "MODEL_PRICE_365", "MODEL_PRICE_463", "MODEL_VARIANCE"]
     },
     "TX COUNT": {
         "table_name": "BTC_DATA.DATA.TX_COUNT",
@@ -146,7 +140,10 @@ TABLE_DICT = {
         "table_name": "BTC_DATA.DATA.PUELL_MULTIPLE",
         "date_col": "DATE",
         "numeric_cols": [
-            "MINTED_BTC", "DAILY_ISSUANCE_USD", "MA_365_ISSUANCE_USD", "PUELL_MULTIPLE"
+            "MINTED_BTC",
+            "DAILY_ISSUANCE_USD",
+            "MA_365_ISSUANCE_USD",
+            "PUELL_MULTIPLE"
         ]
     },
 }
@@ -206,10 +203,29 @@ with st.sidebar:
     chart_type_price = st.radio("BTC Price Chart Type", ["Line", "Bars"], index=0)
     scale_option_price = st.radio("BTC Price Axis", ["Linear", "Log"], index=0)
 
-    # Enable CPD
+    # CPD & Normalization
     detect_cpd = st.checkbox("Detect BTC Price Change Points?", value=False)
+    pen_value = None
+    apply_normalization = False
+    norm_method = "None"
+    norm_cols = []
+
     if detect_cpd:
         pen_value = st.number_input("CPD Penalty", min_value=1, max_value=200, value=10)
+        st.markdown("---")
+        st.subheader("Normalization Options")
+        norm_cols = st.multiselect(
+            "Columns to Normalize (including BTC Price)",
+            [BTC_PRICE_VALUE_COL] + selected_cols,
+            help="Pick which columns on which to apply normalization."
+        )
+        norm_method = st.selectbox(
+            "Normalization Method",
+            ["None", "Z-Score", "Min-Max", "Robust"],
+            index=1  # Default to Z-Score
+        )
+        if norm_method != "None" and norm_cols:
+            apply_normalization = True
 
 ######################################
 # 7) Assign Colors for Each Selected Indicator
@@ -236,6 +252,42 @@ if show_btc_price:
     st.session_state["assigned_colors"]["BTC_PRICE"] = picked_btc_color
     st.session_state["colors"]["BTC_PRICE"] = picked_btc_color
 
+
+########################################
+# Utility Functions for Normalization
+########################################
+def z_score_transform(series: pd.Series) -> pd.Series:
+    mean_val = series.mean()
+    std_val = series.std()
+    if std_val == 0:
+        return series  # Avoid dividing by zero
+    return (series - mean_val) / std_val
+
+def min_max_transform(series: pd.Series) -> pd.Series:
+    min_val = series.min()
+    max_val = series.max()
+    if max_val == min_val:
+        return series  # Avoid dividing by zero
+    return (series - min_val) / (max_val - min_val)
+
+def robust_transform(series: pd.Series) -> pd.Series:
+    median_val = series.median()
+    iqr_val = series.quantile(0.75) - series.quantile(0.25)
+    if iqr_val == 0:
+        return series
+    return (series - median_val) / iqr_val
+
+def apply_normalization_func(series: pd.Series, method: str) -> pd.Series:
+    if method == "Z-Score":
+        return z_score_transform(series)
+    elif method == "Min-Max":
+        return min_max_transform(series)
+    elif method == "Robust":
+        return robust_transform(series)
+    else:
+        # "None" or unrecognized method
+        return series
+
 ######################################
 # 8) MAIN INDICATORS CHART
 ######################################
@@ -245,7 +297,7 @@ with plot_container:
     date_col = table_info["date_col"]
     cols_for_query = ", ".join(selected_cols)
     
-    # Build query with date range. If end date is activated, add an upper bound.
+    # Build query with date range
     query = f"""
         SELECT
             CAST({date_col} AS DATE) AS DATE,
@@ -276,7 +328,7 @@ with plot_container:
         btc_query += "ORDER BY DATE"
         df_btc = session.sql(btc_query).to_pandas()
 
-    # 8.3) Merge data using an outer join so all dates are captured
+    # 8.3) Merge data using an outer join
     if show_btc_price and not df_btc.empty:
         merged_df = pd.merge(df_btc, df_indicators, on="DATE", how="outer")
     else:
@@ -287,35 +339,60 @@ with plot_container:
         st.warning("No data returned. Check your date range or table selection.")
         st.stop()
 
-    # 8.4) CPD: detect change points ONLY on the date range data
-    # because merged_df is already filtered by the chosen date range.
-    # We'll do CPD on the BTC_PRICE within that range if detect_cpd is True.
+    # 8.4) Detect CPD on BTC Price if enabled
+    change_points = []
     if detect_cpd and show_btc_price and BTC_PRICE_VALUE_COL in merged_df.columns:
-        btc_series = merged_df[BTC_PRICE_VALUE_COL].dropna().values
-        change_points = []
-        if len(btc_series) > 2:
-            algo = rpt.Pelt(model="rbf").fit(btc_series)
-            change_points = algo.predict(pen=pen_value)
+        # Drop NaNs before CPD
+        valid_btc = merged_df[BTC_PRICE_VALUE_COL].dropna()
+        if len(valid_btc) > 2:
+            # Indices to realign after dropping NaNs
+            valid_idx = valid_btc.index
+            algo = rpt.Pelt(model="rbf").fit(valid_btc.values)
+            raw_cps = algo.predict(pen=pen_value)  # CP in relative index to 'valid_btc'
+            # Convert relative indices back to original 'merged_df' index
+            for cp in raw_cps:
+                if cp < len(valid_idx):
+                    abs_cp = valid_idx[cp]  # actual index in merged_df
+                    change_points.append(abs_cp)
+            change_points = sorted(list(set(change_points)))  # remove duplicates, sort
         else:
             st.warning("Not enough BTC Price data for change point detection.")
-    else:
-        change_points = []
 
-    # Additional steps like normalization or segmentation can be done here
-    # for each CPD-defined interval, if desired.
+    # 8.5) Apply Normalization per CPD segment if requested
+    if apply_normalization and change_points:
+        # Ensure the final index is included in segment boundary
+        if change_points[-1] != merged_df.index[-1]:
+            change_points.append(merged_df.index[-1])
+        prev_cp = merged_df.index[0]
 
-    # 8.5) Calculate EMA if requested
+        for cp in change_points:
+            seg_indices = merged_df.index[(merged_df.index >= prev_cp) & (merged_df.index < cp)]
+            # If the segment is empty, continue
+            if len(seg_indices) == 0:
+                prev_cp = cp
+                continue
+
+            # Apply chosen normalization method for each column in 'norm_cols'
+            for col in norm_cols:
+                if col in merged_df.columns:
+                    seg_data = merged_df.loc[seg_indices, col]
+                    merged_df.loc[seg_indices, col] = apply_normalization_func(seg_data, norm_method)
+
+            prev_cp = cp
+
+    # 8.6) Calculate EMA if requested
     if show_ema:
+        # The user sees the final data (possibly normalized or raw) with an EMA
         for col in selected_cols:
             if col in merged_df.columns:
                 merged_df[f"EMA_{col}"] = merged_df[col].ewm(span=ema_period).mean()
         if show_btc_price and not df_btc.empty and BTC_PRICE_VALUE_COL in merged_df.columns:
             merged_df["EMA_BTC_PRICE"] = merged_df[BTC_PRICE_VALUE_COL].ewm(span=ema_period).mean()
 
-    # 8.6) Build Plotly Figure
+    # 8.7) Build Plotly Figure
     fig = make_subplots(specs=[[{"secondary_y": True}]])
     
-    # --- Plot on-chain Indicators ---
+    # --- Plot On-chain Indicators ---
     for col in selected_cols:
         if show_ema and f"EMA_{col}" in merged_df.columns:
             fig.add_trace(
@@ -387,15 +464,16 @@ with plot_container:
                     ),
                     secondary_y=price_secondary
                 )
-
-        # Plot CPD lines if detected
+        
+        # Visualize the CPD lines on the chart
         if detect_cpd and change_points:
-            for cp in change_points:
-                if cp < len(merged_df):
-                    cp_date = merged_df["DATE"].iloc[cp]
+            for cp_idx in change_points:
+                # 'cp_idx' is an absolute index, so we get the date from merged_df
+                if cp_idx in merged_df.index:
+                    cp_date = merged_df["DATE"].loc[cp_idx]
                     fig.add_vline(x=cp_date, line_width=2, line_dash="dash", line_color="white")
 
-    # 8.7) Set X-axis range based on start/end date
+    # 8.8) Set X-axis range based on start/end date
     x_range = [selected_start_date.strftime("%Y-%m-%d")]
     if selected_end_date:
         x_range.append(selected_end_date.strftime("%Y-%m-%d"))
@@ -403,7 +481,7 @@ with plot_container:
         x_range.append(merged_df["DATE"].max().strftime("%Y-%m-%d"))
     fig.update_xaxes(title_text="Date", gridcolor="#4f5b66", range=x_range)
 
-    # 8.8) Layout Settings
+    # 8.9) Layout Settings
     fig.update_layout(
         paper_bgcolor="#000000",
         plot_bgcolor="#000000",
