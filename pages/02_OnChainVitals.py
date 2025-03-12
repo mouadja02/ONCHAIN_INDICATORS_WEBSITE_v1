@@ -5,6 +5,7 @@ from plotly.subplots import make_subplots
 import datetime
 import random
 import ruptures as rpt
+import numpy as np
 
 ######################################
 # 1) Page Configuration & Dark Theme
@@ -202,13 +203,33 @@ with st.sidebar:
     chart_type_price = st.radio("BTC Price Chart Type", ["Line", "Bars"], index=0)
     scale_option_price = st.radio("BTC Price Axis", ["Linear", "Log"], index=0)
 
-    # Enable CPD & Normalization
+    # Enable CPD
     detect_cpd = st.checkbox("Detect BTC Price Change Points?", value=False)
     if detect_cpd:
         pen_value = st.number_input("CPD Penalty", min_value=1, max_value=200, value=10)
-        apply_normalization = st.checkbox("Apply Z-Score Normalization (per CPD segment)?", value=True)
-    else:
-        apply_normalization = False
+
+    # Normalization Options
+    st.markdown("---")
+    st.header("Normalization")
+    st.write("Choose which columns to normalize (including BTC price if you want).")
+    
+    # Gather columns to possibly normalize (btc price + selected_cols if show_btc_price)
+    columns_for_normalization = list(selected_cols)
+    if show_btc_price:
+        columns_for_normalization = [BTC_PRICE_VALUE_COL] + columns_for_normalization
+
+    # Define available normalization methods
+    NORMALIZATION_METHODS = ["None", "Z-Score", "Min-Max", "Robust", "Log Transform"]
+
+    # We'll store the user's choices in a dict: {column: method}
+    col_to_norm_method = {}
+    for col in columns_for_normalization:
+        method = st.selectbox(
+            f"Normalization method for {col}",
+            NORMALIZATION_METHODS,
+            index=0  # default "None"
+        )
+        col_to_norm_method[col] = method
 
 ######################################
 # 7) Assign Colors for Each Selected Indicator
@@ -290,34 +311,83 @@ with plot_container:
     change_points = []
     if detect_cpd and show_btc_price and BTC_PRICE_VALUE_COL in merged_df.columns:
         btc_series = merged_df[BTC_PRICE_VALUE_COL].dropna().values
-        if len(btc_series) > 2:  # need enough data points
+        if len(btc_series) > 2:  # need enough data for CPD
             algo = rpt.Pelt(model="rbf").fit(btc_series)
             change_points = algo.predict(pen=pen_value)
         else:
             st.warning("Not enough BTC Price data for change point detection.")
     
-    # 8.5) Z-score normalization per segment if requested
-    #     We'll do this before computing EMA, so the charts reflect normalized data.
-    if apply_normalization and change_points:
-        # Ensure we handle segments from 0 to the end of merged_df.
-        # By default, 'predict' includes the final index as a change point.
+    # ========== HELPER FUNCTIONS FOR NORMALIZATION ==========
+    def z_score(series: pd.Series):
+        mu = series.mean()
+        sigma = series.std()
+        return (series - mu) / sigma if sigma != 0 else series
+
+    def min_max(series: pd.Series):
+        min_val = series.min()
+        max_val = series.max()
+        return (series - min_val) / (max_val - min_val) if max_val != min_val else series
+
+    def robust_scale(series: pd.Series):
+        median_val = series.median()
+        iqr = series.quantile(0.75) - series.quantile(0.25)
+        return (series - median_val) / iqr if iqr != 0 else series
+
+    def log_transform(series: pd.Series):
+        # Add small constant to avoid log(0)
+        return np.log(series + 1e-9).replace(-np.inf, np.nan)
+
+    def apply_normalization(series: pd.Series, method: str) -> pd.Series:
+        """Apply the chosen normalization method to a pandas Series."""
+        s = series.copy()
+        if method == "Z-Score":
+            s = z_score(s)
+        elif method == "Min-Max":
+            s = min_max(s)
+        elif method == "Robust":
+            s = robust_scale(s)
+        elif method == "Log Transform":
+            s = log_transform(s)
+        # "None" or unknown => do nothing
+        return s
+
+    # ========== 8.5) Apply Normalization (Segmented if CPD is on) ==========
+    # We'll normalize each column according to the user's selection in col_to_norm_method.
+    # If CPD is on, do it segment by segment for columns that have a method != "None".
+    # If CPD is off, do the entire series at once.
+
+    def normalize_per_segment(df: pd.DataFrame, segments: list, columns_to_normalize: dict):
+        """
+        Applies the chosen normalization method segment by segment for the columns
+        specified in 'columns_to_normalize'.
+        
+        :param df: The merged DataFrame (sorted by DATE)
+        :param segments: List of change points (indices). Typically from ruptures 'predict'
+        :param columns_to_normalize: dict {col_name: normalization_method}
+        """
+        # Ensure we have a segment from start=0
         prev_cp = 0
-        for cp in change_points:
-            # Segment range in 0-based indexing: [prev_cp, cp)
-            seg_indices = merged_df.index[prev_cp:cp]
-            
-            # For both BTC price and selected indicators
-            for col in [BTC_PRICE_VALUE_COL] + selected_cols:
-                if col in merged_df.columns:
-                    seg_data = merged_df.loc[seg_indices, col]
-                    mean_val = seg_data.mean()
-                    std_val = seg_data.std()
-                    if std_val != 0:
-                        merged_df.loc[seg_indices, col] = (seg_data - mean_val) / std_val
-            
+        for cp in segments:
+            seg_indices = df.index[prev_cp:cp]
+            for col, method in columns_to_normalize.items():
+                if (col in df.columns) and (method != "None"):
+                    df.loc[seg_indices, col] = apply_normalization(df.loc[seg_indices, col], method)
             prev_cp = cp
 
-    # 8.6) Calculate EMA if requested (on normalized or raw data, depending on user steps)
+    columns_with_methods = {
+        col: col_to_norm_method[col] for col in col_to_norm_method if col_to_norm_method[col] != "None"
+    }
+
+    if detect_cpd and change_points:
+        # Segment-based normalization for columns that have a chosen method
+        normalize_per_segment(merged_df, change_points, columns_with_methods)
+    else:
+        # Global normalization (no CPD segmentation)
+        for col, method in columns_with_methods.items():
+            if col in merged_df.columns and method != "None":
+                merged_df[col] = apply_normalization(merged_df[col], method)
+
+    # ========== 8.6) Calculate EMA if requested ==========
     if show_ema:
         for col in selected_cols:
             if col in merged_df.columns:
@@ -325,7 +395,7 @@ with plot_container:
         if show_btc_price and not df_btc.empty and BTC_PRICE_VALUE_COL in merged_df.columns:
             merged_df["EMA_BTC_PRICE"] = merged_df[BTC_PRICE_VALUE_COL].ewm(span=ema_period).mean()
 
-    # 8.7) Build Plotly Figure
+    # ========== 8.7) Build Plotly Figure ==========
     fig = make_subplots(specs=[[{"secondary_y": True}]])
     
     # --- Plot On-chain Indicators ---
@@ -401,14 +471,14 @@ with plot_container:
                     secondary_y=price_secondary
                 )
         
-        # Visualize the CPD lines on the chart
+        # --- Visualize the CPD lines on the chart
         if detect_cpd and change_points:
             for cp in change_points:
                 if cp < len(merged_df):
                     cp_date = merged_df["DATE"].iloc[cp]
                     fig.add_vline(x=cp_date, line_width=2, line_dash="dash", line_color="white")
 
-    # 8.8) Set X-axis range based on start/end date
+    # ========== 8.8) Set X-axis range ==========
     x_range = [selected_start_date.strftime("%Y-%m-%d")]
     if selected_end_date:
         x_range.append(selected_end_date.strftime("%Y-%m-%d"))
@@ -416,7 +486,7 @@ with plot_container:
         x_range.append(merged_df["DATE"].max().strftime("%Y-%m-%d"))
     fig.update_xaxes(title_text="Date", gridcolor="#4f5b66", range=x_range)
 
-    # 8.9) Layout Settings
+    # ========== 8.9) Layout Settings ==========
     fig.update_layout(
         paper_bgcolor="#000000",
         plot_bgcolor="#000000",
