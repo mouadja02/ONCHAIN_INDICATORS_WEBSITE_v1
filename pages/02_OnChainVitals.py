@@ -201,7 +201,7 @@ with st.sidebar:
     # Otherwise => 2015-01-01
     # ---------------------------
     if selected_table == "FEAR & GREED INDEX":
-        default_start_date = datetime.date(2010, 1, 1)
+        default_start_date = datetime.date(2018, 1, 1)
     else:
         default_start_date = datetime.date(2015, 1, 1)
 
@@ -407,6 +407,22 @@ with plot_container:
         )
 
         st.plotly_chart(fig, use_container_width=True)
+
+        ######################################
+        if st.button("Save Figure"):
+            buffer = io.BytesIO()
+            fig.write_image(buffer, format="png", scale=2)
+            buffer.seek(0)
+        
+            # Provide download link
+            st.download_button(
+                label="Download Plot as PNG",
+                data=buffer,
+                file_name=f"btc_dashboard_{theme_choice.lower()}.png",
+                mime="image/png"
+            )
+
+
         st.stop()
 
     # -------------------------
