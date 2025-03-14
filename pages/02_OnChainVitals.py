@@ -390,25 +390,36 @@ with plot_container:
                 secondary_y=False
             )
 
-        # Layout updates
+        # Define colors based on the selected theme
+        if theme_choice == "Dark":
+            bg_color = "#000000"  # Black background
+            grid_color = "#4f5b66"  # Dark grid lines
+            font_color = "#f0f2f6"  # Light font color
+        else:
+            bg_color = "#FFFFFF"  # White background
+            grid_color = "#D3D3D3"  # Light grid lines
+            font_color = "#000000"  # Dark font color
+        
+        # Update Layout based on theme selection
         fig.update_layout(
-            paper_bgcolor="#ffffff",
-            plot_bgcolor="#ffffff",
+            paper_bgcolor=bg_color,
+            plot_bgcolor=bg_color,
             hovermode="x unified",
-            font=dict(color="#f0f2f6"),
+            font=dict(color=font_color),
             title="Fear & Greed Index vs BTC Price" if show_btc_price else "Fear & Greed Index",
             legend=dict(x=0, y=1.05, orientation="h", bgcolor="rgba(0,0,0,0)")
         )
-        fig.update_xaxes(title_text="Date", gridcolor="#4f5b66")
+        
+        fig.update_xaxes(title_text="Date", gridcolor=grid_color)
         fig.update_yaxes(
             title_text="BTC Price (USD)" if show_btc_price else "FNG (no BTC Price)",
             type="log" if scale_option_price == "Log" else "linear",
-            gridcolor="#4f5b66"
+            gridcolor=grid_color
         )
-
+        
+        # Display the chart
         st.plotly_chart(fig, use_container_width=True)
-
-
+        
 
         st.stop()
 
