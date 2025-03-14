@@ -6,6 +6,7 @@ import datetime
 import random
 import ruptures as rpt
 import numpy as np
+import io
 
 ######################################
 # 1) Page Configuration & Dark Theme
