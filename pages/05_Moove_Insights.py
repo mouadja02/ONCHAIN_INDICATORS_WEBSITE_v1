@@ -416,6 +416,11 @@ TABLE_DICT = {
             "TX_GT_100000_BTC"
             ]
     },
+    "FEAR & GREED INDEX": {
+        "table_name": "BTC_DATA.DATA.FEAR_GREED_INDEX",
+        "date_col": "DATE",
+        "numeric_cols": ["FNG_VALUE"]
+    },
 }
 ######################################
 # Sidebar Controls
