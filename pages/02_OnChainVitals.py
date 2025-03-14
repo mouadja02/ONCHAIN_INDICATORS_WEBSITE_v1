@@ -392,8 +392,8 @@ with plot_container:
 
         # Layout updates
         fig.update_layout(
-            paper_bgcolor="#000000",
-            plot_bgcolor="#000000",
+            paper_bgcolor="#ffffff",
+            plot_bgcolor="#ffffff",
             hovermode="x unified",
             font=dict(color="#f0f2f6"),
             title="Fear & Greed Index vs BTC Price" if show_btc_price else "Fear & Greed Index",
@@ -408,19 +408,6 @@ with plot_container:
 
         st.plotly_chart(fig, use_container_width=True)
 
-        ######################################
-        if st.button("Save Figure"):
-            buffer = io.BytesIO()
-            fig.write_image(buffer, format="png", scale=2)
-            buffer.seek(0)
-        
-            # Provide download link
-            st.download_button(
-                label="Download Plot as PNG",
-                data=buffer,
-                file_name=f"btc_dashboard_{theme_choice.lower()}.png",
-                mime="image/png"
-            )
 
 
         st.stop()
