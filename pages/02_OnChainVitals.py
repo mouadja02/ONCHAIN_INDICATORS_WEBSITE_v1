@@ -90,7 +90,11 @@ TABLE_DICT = {
     "REALIZED CAP AND PRICE": {
         "table_name": "BTC_DATA.DATA.BTC_REALIZED_CAP_AND_PRICE",
         "date_col": "DATE",
-        "numeric_cols": ["REALIZED_CAP_USD", "REALIZED_PRICE_USD", "TOTAL_UNSPENT_BTC"]
+        "numeric_cols": [
+            "REALIZED_CAP_USD",
+            "REALIZED_PRICE_USD",
+            "TOTAL_UNSPENT_BTC"
+        ]
     },
     "CDD": {
         "table_name": "BTC_DATA.DATA.CDD",
@@ -166,12 +170,47 @@ TABLE_DICT = {
     "PUELL MULTIPLE": {
         "table_name": "BTC_DATA.DATA.PUELL_MULTIPLE",
         "date_col": "DATE",
-        "numeric_cols": ["MINTED_BTC", "DAILY_ISSUANCE_USD", "MA_365_ISSUANCE_USD", "PUELL_MULTIPLE"]
+        "numeric_cols": [
+            "MINTED_BTC", "DAILY_ISSUANCE_USD", "MA_365_ISSUANCE_USD",
+            "PUELL_MULTIPLE"
+        ]
+    },
+    "TRADE VOLUME": {
+        "table_name": "BTC_DATA.DATA.TRADE_VOLUME",
+        "date_col": "DATE",
+        "numeric_cols": [ "TRADE_VOLUME","DOMINANCE"]
+    },   
+    "GOOGLE TREND": {
+        "table_name": "BTC_DATA.DATA.google_trend",
+        "date_col": "DATE",
+        "numeric_cols": [ "INDEX"]
     },
     "FEAR & GREED INDEX": {
         "table_name": "BTC_DATA.DATA.FEAR_GREED_INDEX",
         "date_col": "DATE",
         "numeric_cols": ["FNG_VALUE"]
+    },
+    "TWITTER SENTIMENT": {
+        "table_name": "BTC_DATA.DATA.TWITTER_SENTIMENT",
+        "date_col": "DATE",
+        "numeric_cols": [
+            "TWITTER_FOMO",
+            "TWITTER_BULLISH",
+            "TWITTER_BEARISH",
+            "TWITTER_FEARFUL_CONCERNED",
+            "TWITTER_PRICE"
+        ]
+    },    
+    "REDDIT SENTIMENT": {
+        "table_name": "BTC_DATA.DATA.REDDIT_SENTIMENT",
+        "date_col": "DATE",
+        "numeric_cols": [
+            "REDDIT_FOMO",
+            "REDDIT_BULLISH",
+            "REDDIT_BEARISH",
+            "REDDIT_FEARFUL_CONCERNED",
+            "REDDIT_PRICE"
+        ]
     },
 }
 
@@ -189,16 +228,27 @@ st.title("Bitcoin On-chain Indicators Dashboard")
 ######################################
 with st.sidebar:
     st.header("Select On-chain Indicator")
-    selected_table = st.selectbox("Select a Table (Metric Set)", list(TABLE_DICT.keys()), help="Pick which table (indicator set) to visualize.")
+    selected_table = st.selectbox(
+        "Select a Table (Metric Set)",
+        list(TABLE_DICT.keys()),
+        help="Pick which table (indicator set) to visualize."
+    )
     table_info = TABLE_DICT[selected_table]
 
-    # Default start date: for FEAR & GREED use an earlier date, otherwise use 2015
+    # ---------------------------
+    # Default start date:
+    # For Fear & Greed => 2018-02-01
+    # Otherwise => 2015-01-01
+    # ---------------------------
     if selected_table == "FEAR & GREED INDEX":
         default_start_date = datetime.date(2010, 1, 1)
     else:
         default_start_date = datetime.date(2015, 1, 1)
+
+    # Let user pick the start date (default above)
     selected_start_date = st.date_input("Start Date", value=default_start_date)
     
+    # End Date Option
     activate_end_date = st.checkbox("Activate End Date", value=False)
     if activate_end_date:
         default_end_date = datetime.date.today()
@@ -206,17 +256,24 @@ with st.sidebar:
     else:
         selected_end_date = None
 
+    # For the selected table, let user pick from numeric_cols
     all_numeric_cols = table_info["numeric_cols"]
-    selected_cols = st.multiselect("Select Indicator(s):", all_numeric_cols, default=all_numeric_cols, help="Pick one or more numeric columns to plot.")
+    selected_cols = st.multiselect(
+        "Select Indicator(s):",
+        all_numeric_cols,
+        default=all_numeric_cols,
+        help="Pick one or more numeric columns to plot."
+    )
 
     st.markdown("---")
     st.header("Chart Options")
     scale_option_indicator = st.radio("Indicator Axis Scale", ["Linear", "Log"], index=0)
     chart_type_indicators = st.radio("Indicator Chart Type", ["Line", "Bars"], index=0)
+
     show_ema = st.checkbox("Add EMA for Indicators", value=False)
     if show_ema:
         ema_period = st.number_input("EMA Period (days)", min_value=2, max_value=200, value=20)
-    
+
     st.markdown("---")
     st.header("BTC Price Options")
     show_btc_price = st.checkbox("Show BTC Price?", value=True)
@@ -224,21 +281,31 @@ with st.sidebar:
     chart_type_price = st.radio("BTC Price Chart Type", ["Line", "Bars"], index=0)
     scale_option_price = st.radio("BTC Price Axis", ["Linear", "Log"], index=0)
 
+    # Enable CPD
     detect_cpd = st.checkbox("Detect BTC Price Change Points?", value=False)
     pen_value = None
     if detect_cpd:
         pen_value = st.number_input("CPD Penalty", min_value=1, max_value=200, value=10)
-    
+
+    # Normalization Options
     st.markdown("---")
     st.header("Normalization")
     st.write("Choose which columns to normalize (including BTC price if you want).")
+    
+    # Gather columns to possibly normalize
     columns_for_normalization = list(selected_cols)
     if show_btc_price:
         columns_for_normalization = [BTC_PRICE_VALUE_COL] + columns_for_normalization
+
     NORMALIZATION_METHODS = ["None", "Z-Score", "Min-Max", "Robust", "Log Transform"]
+
     col_to_norm_method = {}
     for col in columns_for_normalization:
-        method = st.selectbox(f"Normalization method for {col}", NORMALIZATION_METHODS, index=0)
+        method = st.selectbox(
+            f"Normalization method for {col}",
+            NORMALIZATION_METHODS,
+            index=0  # default "None"
+        )
         col_to_norm_method[col] = method
 
 ######################################
@@ -273,8 +340,11 @@ plot_container = st.container()
 with plot_container:
     # --- 8.1) Special Case: FEAR & GREED INDEX ---
     if selected_table == "FEAR & GREED INDEX":
+        # 1) Query Fear & Greed data
         date_col = table_info["date_col"]
         cols_for_query = ", ".join(selected_cols)
+
+        # Build query for Fear & Greed
         query_fng = f"""
             SELECT
                 CAST({date_col} AS DATE) AS DATE,
@@ -286,8 +356,11 @@ with plot_container:
         if selected_end_date:
             query_fng += f" AND CAST({date_col} AS DATE) <= '{selected_end_date}'\n"
         query_fng += "ORDER BY DATE"
+
         df_fng = session.sql(query_fng).to_pandas()
         df_fng.rename(columns={"DATE": "DATE"}, inplace=True)
+
+        # 2) Query BTC Price
         df_btc = pd.DataFrame()
         if show_btc_price:
             btc_query = f"""
@@ -302,12 +375,18 @@ with plot_container:
                 btc_query += f" AND CAST({BTC_PRICE_DATE_COL} AS DATE) <= '{selected_end_date}'\n"
             btc_query += "ORDER BY DATE"
             df_btc = session.sql(btc_query).to_pandas()
+
+        # 3) Merge on DATE (outer join to capture all dates)
         merged_df = pd.merge(df_btc, df_fng, on="DATE", how="outer")
         merged_df.sort_values("DATE", inplace=True)
         if merged_df.empty:
             st.warning("No data returned. Check your date range.")
             st.stop()
+
+        # 4) Create figure: BTC Price line + scatter colored by FNG_VALUE
         fig = make_subplots(specs=[[{"secondary_y": True}]])
+        
+        # Plot BTC Price as a line
         if show_btc_price and not df_btc.empty and BTC_PRICE_VALUE_COL in merged_df.columns:
             fig.add_trace(
                 go.Scatter(
@@ -315,22 +394,27 @@ with plot_container:
                     y=merged_df[BTC_PRICE_VALUE_COL],
                     mode="lines",
                     name="BTC Price (USD)",
-                    line=dict(color="white" if theme_choice=="Dark" else "black")
+                    line=dict(color="white")
                 ),
                 secondary_y=False
             )
+
+        # Plot Fear & Greed as a heatmap of points
         if "FNG_VALUE" in merged_df.columns:
+            # We'll store FNG_CLASS in customdata, and use a custom hovertemplate.
             fig.add_trace(
                 go.Scatter(
                     x=merged_df["DATE"],
+                    # If BTC price is shown, align points vertically with BTC price
+                    # otherwise, place them at 0 on the y-axis.
                     y=merged_df[BTC_PRICE_VALUE_COL] if show_btc_price else [0]*len(merged_df),
                     mode="markers",
                     name="Fear & Greed (Heatmap)",
                     marker=dict(
-                        color=merged_df["FNG_VALUE"],
-                        colorscale="RdYlGn",
+                        color=merged_df["FNG_VALUE"],   # numeric FNG value
+                        colorscale="RdYlGn",            # red -> yellow -> green
                         cmin=0,
-                        cmax=100,
+                        cmax=100,                       # typical range of FNG
                         showscale=True,
                         colorbar=dict(title="FNG"),
                         size=5
@@ -339,37 +423,30 @@ with plot_container:
                     hovertemplate=(
                         "Date: %{x|%Y-%m-%d}<br>"
                         "FNG Value: %{marker.color}<br>"
-                        "FNG Class: %{customdata}<extra></extra>"
+                        "FNG Class: %{customdata}"
+                        "<extra></extra>"
                     )
                 ),
                 secondary_y=False
             )
-        # Layout updates based on theme
+
+        # Layout updates
         fig.update_layout(
-            paper_bgcolor=bg_color,
-            plot_bgcolor=bg_color,
+            paper_bgcolor="#000000",
+            plot_bgcolor="#000000",
             hovermode="x unified",
-            font=dict(color=text_color),
+            font=dict(color="#f0f2f6"),
             title="Fear & Greed Index vs BTC Price" if show_btc_price else "Fear & Greed Index",
             legend=dict(x=0, y=1.05, orientation="h", bgcolor="rgba(0,0,0,0)")
         )
-        fig.update_xaxes(title_text="Date", gridcolor=grid_color)
+        fig.update_xaxes(title_text="Date", gridcolor="#4f5b66")
         fig.update_yaxes(
             title_text="BTC Price (USD)" if show_btc_price else "FNG (no BTC Price)",
             type="log" if scale_option_price == "Log" else "linear",
-            gridcolor=grid_color
+            gridcolor="#4f5b66"
         )
+
         st.plotly_chart(fig, use_container_width=True)
-        if st.button("Save Figure"):
-            buffer = io.BytesIO()
-            fig.write_image(buffer, format="png", scale=2, engine="kaleido")
-            buffer.seek(0)
-            st.download_button(
-                label="Download Plot as PNG",
-                data=buffer,
-                file_name=f"btc_dashboard_{theme_choice.lower()}.png",
-                mime="image/png"
-            )
         st.stop()
 
     # -------------------------
@@ -377,6 +454,8 @@ with plot_container:
     # -------------------------
     date_col = table_info["date_col"]
     cols_for_query = ", ".join(selected_cols)
+    
+    # Build query with date range
     query = f"""
         SELECT
             CAST({date_col} AS DATE) AS DATE,
@@ -387,8 +466,11 @@ with plot_container:
     if selected_end_date:
         query += f" AND CAST({date_col} AS DATE) <= '{selected_end_date}'\n"
     query += "ORDER BY DATE"
+    
     df_indicators = session.sql(query).to_pandas()
     df_indicators.rename(columns={"DATE": "DATE"}, inplace=True)
+
+    # 8.2) Query BTC Price if requested
     df_btc = pd.DataFrame()
     if show_btc_price:
         btc_query = f"""
@@ -403,14 +485,19 @@ with plot_container:
             btc_query += f" AND CAST({BTC_PRICE_DATE_COL} AS DATE) <= '{selected_end_date}'\n"
         btc_query += "ORDER BY DATE"
         df_btc = session.sql(btc_query).to_pandas()
+
+    # 8.3) Merge data
     if show_btc_price and not df_btc.empty:
         merged_df = pd.merge(df_btc, df_indicators, on="DATE", how="outer")
     else:
         merged_df = df_indicators
+
     merged_df.sort_values("DATE", inplace=True)
     if merged_df.empty:
         st.warning("No data returned. Check your date range or table selection.")
         st.stop()
+
+    # 8.4) CPD on BTC Price if enabled
     change_points = []
     if detect_cpd and show_btc_price and BTC_PRICE_VALUE_COL in merged_df.columns:
         btc_series = merged_df[BTC_PRICE_VALUE_COL].dropna().values
@@ -419,20 +506,27 @@ with plot_container:
             change_points = algo.predict(pen=pen_value)
         else:
             st.warning("Not enough BTC Price data for change point detection.")
+
+    # --- Helper functions for normalization ---
     def z_score(series: pd.Series):
         mu = series.mean()
         sigma = series.std()
         return (series - mu) / sigma if sigma != 0 else series
+
     def min_max(series: pd.Series):
         min_val = series.min()
         max_val = series.max()
         return (series - min_val) / (max_val - min_val) if max_val != min_val else series
+
     def robust_scale(series: pd.Series):
         median_val = series.median()
         iqr = series.quantile(0.75) - series.quantile(0.25)
         return (series - median_val) / iqr if iqr != 0 else series
+
     def log_transform(series: pd.Series):
+        # Add small constant to avoid log(0)
         return np.log(series + 1e-9).replace(-np.inf, np.nan)
+
     def apply_normalization(series: pd.Series, method: str) -> pd.Series:
         s = series.copy()
         if method == "Z-Score":
@@ -444,6 +538,8 @@ with plot_container:
         elif method == "Log Transform":
             s = log_transform(s)
         return s
+
+    # --- 8.5) Apply Normalization ---
     def normalize_per_segment(df: pd.DataFrame, segments: list, columns_to_normalize: dict):
         prev_cp = 0
         for cp in segments:
@@ -453,20 +549,30 @@ with plot_container:
                     seg_data = df.loc[seg_indices, col]
                     df.loc[seg_indices, col] = apply_normalization(seg_data, method)
             prev_cp = cp
-    columns_with_methods = { c: col_to_norm_method[c] for c in col_to_norm_method if col_to_norm_method[c] != "None" }
+
+    columns_with_methods = {
+        c: col_to_norm_method[c] for c in col_to_norm_method if col_to_norm_method[c] != "None"
+    }
+
     if detect_cpd and change_points:
         normalize_per_segment(merged_df, change_points, columns_with_methods)
     else:
         for col, method in columns_with_methods.items():
             if col in merged_df.columns and method != "None":
                 merged_df[col] = apply_normalization(merged_df[col], method)
+
+    # 8.6) Calculate EMA if requested
     if show_ema:
         for col in selected_cols:
             if col in merged_df.columns:
                 merged_df[f"EMA_{col}"] = merged_df[col].ewm(span=ema_period).mean()
         if show_btc_price and not df_btc.empty and BTC_PRICE_VALUE_COL in merged_df.columns:
             merged_df["EMA_BTC_PRICE"] = merged_df[BTC_PRICE_VALUE_COL].ewm(span=ema_period).mean()
+
+    # 8.7) Build Plotly Figure
     fig = make_subplots(specs=[[{"secondary_y": True}]])
+    
+    # --- Plot On-chain Indicators ---
     for col in selected_cols:
         if show_ema and f"EMA_{col}" in merged_df.columns:
             fig.add_trace(
@@ -501,6 +607,8 @@ with plot_container:
                     ),
                     secondary_y=False
                 )
+
+    # --- Plot BTC Price ---
     if show_btc_price and not df_btc.empty and BTC_PRICE_VALUE_COL in merged_df.columns:
         price_secondary = not same_axis_checkbox
         if show_ema and "EMA_BTC_PRICE" in merged_df.columns:
@@ -536,37 +644,45 @@ with plot_container:
                     ),
                     secondary_y=price_secondary
                 )
+        
+        # --- Visualize CPD lines on the chart
         if detect_cpd and change_points:
             for cp in change_points:
                 if cp < len(merged_df):
                     cp_date = merged_df["DATE"].iloc[cp]
-                    fig.add_vline(x=cp_date, line_width=2, line_dash="dash", line_color="white" if theme_choice=="Dark" else "black")
+                    fig.add_vline(x=cp_date, line_width=2, line_dash="dash", line_color="white")
+
+    # 8.8) Set X-axis range
     x_range = [selected_start_date.strftime("%Y-%m-%d")]
     if selected_end_date:
         x_range.append(selected_end_date.strftime("%Y-%m-%d"))
     else:
         x_range.append(merged_df["DATE"].max().strftime("%Y-%m-%d"))
-    fig.update_xaxes(title_text="Date", gridcolor=grid_color, range=x_range)
+
+    fig.update_xaxes(title_text="Date", gridcolor="#4f5b66", range=x_range)
+
+    # 8.9) Layout Settings
     fig.update_layout(
-        paper_bgcolor=bg_color,
-        plot_bgcolor=bg_color,
-        title=f"{selected_table} vs BTC Price" if show_btc_price else f"{selected_table}",
+        paper_bgcolor="#000000",
+        plot_bgcolor="#000000",
+        title=f"{selected_table} vs BTC Price" if show_btc_price else f"{selected_table}", 
         hovermode="x unified",
-        font=dict(color=text_color),
+        font=dict(color="#f0f2f6"),
         legend=dict(x=0, y=1.05, orientation="h", bgcolor="rgba(0,0,0,0)")
     )
     fig.update_yaxes(
         title_text="Indicator Value",
         type="log" if scale_option_indicator == "Log" else "linear",
         secondary_y=False,
-        gridcolor=grid_color
+        gridcolor="#4f5b66"
     )
     fig.update_yaxes(
         title_text="BTC Price (USD)" if not same_axis_checkbox else "",
         type="log" if scale_option_price == "Log" else "linear",
         secondary_y=True,
-        gridcolor=grid_color
+        gridcolor="#4f5b66"
     )
+
     config = {
         'editable': True,
         'modeBarButtonsToAdd': [
@@ -575,13 +691,19 @@ with plot_container:
         ]
     }
     st.plotly_chart(fig, use_container_width=True, config=config)
-    if st.button("Save Figure"):
-        buffer = io.BytesIO()
-        fig.write_image(buffer, format="png", scale=2, engine="kaleido")
-        buffer.seek(0)
-        st.download_button(
-            label="Download Plot as PNG",
-            data=buffer,
-            file_name=f"btc_dashboard_{theme_choice.lower()}.png",
-            mime="image/png"
-        )
+
+######################################
+# 9) Save Figure Button
+######################################
+if st.button("Save Figure"):
+    buffer = io.BytesIO()
+    fig.write_image(buffer, format="png", scale=2)
+    buffer.seek(0)
+
+    # Provide download link
+    st.download_button(
+        label="Download Plot as PNG",
+        data=buffer,
+        file_name=f"btc_dashboard_{theme_choice.lower()}.png",
+        mime="image/png"
+    )
