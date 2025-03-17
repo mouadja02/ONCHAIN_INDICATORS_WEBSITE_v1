@@ -1,5 +1,4 @@
-
-.snowflake-snowpark-python
+snowflake-snowpark-python
 streamlit
 requests
 pandas
@@ -8,3 +7,4 @@ datetime
 ruptures
 matplotlib
 seaborn
+minepy
