@@ -10,9 +10,10 @@ import datetime
 import random
 import calendar
 import io
-from minepy import MINE
 
-
+######################################
+# 1) Page Configuration & Dark Theme
+######################################
 st.set_page_config(
     page_title="Bitcoin Price Movement Dashboard",
     layout="wide",
@@ -38,7 +39,7 @@ st.markdown(
 ######################################
 # 2) Snowflake Connection (adjust to your environment)
 ######################################
-cx = st.connection("snowflake")  # You would configure this in Streamlit Community Cloud or locally
+cx = st.connection("snowflake")  # Ensure your connection is configured
 session = cx.session()
 
 ######################################
@@ -95,7 +96,6 @@ with st.sidebar:
     else:
         selected_end_date = None
 
-
 ######################################
 # 7) BTC PRICE MOVEMENT QUERY
 ######################################
@@ -150,7 +150,6 @@ if show_btc_price:
         )
 
 if show_movement_scatter:
-    # Plot states individually so they have their own legend entries
     for state in sorted(state_color_label.keys(), reverse=True):
         state_data = df_btc_movement[df_btc_movement["PRICE_MOVEMENT_STATE"] == state]
         if not state_data.empty:
@@ -195,7 +194,6 @@ candle_span = st.selectbox("Select Candle Chart Span", ["Daily", "Weekly", "Mont
 if candle_span == "Daily":
     period_expr = f"DATE_TRUNC('day', {BTC_PRICE_DATE_COL})"
 elif candle_span == "Weekly":
-    # For weekly grouping from Monday to Sunday
     period_expr = (
         f"DATEADD(day, CASE WHEN DAYOFWEEK({BTC_PRICE_DATE_COL}) = 1 "
         f"THEN -6 ELSE 2 - DAYOFWEEK({BTC_PRICE_DATE_COL}) END, {BTC_PRICE_DATE_COL})"
@@ -276,6 +274,9 @@ st.download_button(
     mime="text/csv",
 )
 
+######################################
+# 10) Correlation Matrix of On-chain Features
+######################################
 st.title("Correlation Matrix of On-chain Features")
 
 ######################################
@@ -300,7 +301,7 @@ TABLE_DICT = {
         "table_name": "BTC_DATA.DATA.BTC_PRICE_USD",
         "date_col": "DATE",
         "numeric_cols": [
-            "BTC_PRICE_USD",
+            "BTC_PRICE_USD"
         ]
     },
     "BTC PRICE MOUVEMENT": {
@@ -388,12 +389,12 @@ TABLE_DICT = {
             "TX_GT_1000_BTC",
             "TX_GT_10000_BTC",
             "TX_GT_100000_BTC"
-            ]
+        ]
     },
     "TRADE VOLUME": {
         "table_name": "BTC_DATA.DATA.TRADE_VOLUME",
         "date_col": "DATE",
-        "numeric_cols": [ "TRADE_VOLUME","DOMINANCE"]
+        "numeric_cols": [ "TRADE_VOLUME", "DOMINANCE"]
     },
     "GOOGLE TREND": {
         "table_name": "BTC_DATA.DATA.GOOGLE_TREND",
@@ -444,73 +445,39 @@ TABLE_DICT = {
     },
 }
 
-
 ######################################
-# Utility Function to Compute MIC Matrix
-######################################
-def compute_mic_matrix(df: pd.DataFrame) -> pd.DataFrame:
-    """
-    Compute the Maximal Information Coefficient (MIC) matrix for all
-    column pairs in the given DataFrame (numeric only).
-    Requires minepy (pip install minepy).
-    """
-    col_names = df.columns
-    n = len(col_names)
-    mic_values = np.zeros((n, n))
-
-    for i in range(n):
-        for j in range(i, n):
-            # Drop rows with NaN in either column
-            common_df = df[[col_names[i], col_names[j]]].dropna()
-            if common_df.shape[0] < 2:
-                # If insufficient data points, set MIC to 0
-                mic = 0
-            else:
-                x = common_df[col_names[i]].values
-                y = common_df[col_names[j]].values
-                mine = MINE(alpha=0.6, c=15, est="mic_e")  # or "mic_approx"
-                mine.compute_score(x, y)
-                mic = mine.mic()
-            mic_values[i, j] = mic
-            mic_values[j, i] = mic  # symmetric
-
-    return pd.DataFrame(mic_values, index=col_names, columns=col_names)
-
-
-######################################
-# Sidebar Controls for Correlation
+# Sidebar Controls for Correlation Settings
 ######################################
 with st.sidebar:
     st.header("Correlation Settings")
-
-    # Choose correlation method
+    # Choose correlation method (MIC option removed)
     corr_method = st.selectbox(
         "Select Correlation Method:",
-        ["Pearson", "Spearman", "MIC"],
+        ["Pearson", "Spearman"],
         index=0,
-        help="Spearman (rank-based) & MIC (maximal info) can detect non-linear relationships."
+        help="Spearman (rank-based) may detect monotonic relationships better."
     )
     
-    # Date selection
-    default_start_date = datetime.date(2015, 1, 1)
-    start_date = st.date_input("Start Date (corr)", value=default_start_date, key="corr_start_date")
+    # Date range selection for correlation data
+    default_corr_start = datetime.date(2015, 1, 1)
+    start_date_corr = st.date_input("Start Date (corr)", value=default_corr_start, key="corr_start_date")
     
     activate_end_date_corr = st.checkbox("Activate End Date (corr)", value=False, key="corr_activate_end")
     if activate_end_date_corr:
-        default_end_date_corr = datetime.date.today()
-        end_date = st.date_input("End Date (corr)", value=default_end_date_corr, key="corr_end_date")
+        default_corr_end = datetime.date.today()
+        end_date_corr = st.date_input("End Date (corr)", value=default_corr_end, key="corr_end_date")
     else:
-        end_date = None
+        end_date_corr = None
 
     # Select tables to include
     selected_tables = st.multiselect(
         "Select tables to include:",
         list(TABLE_DICT.keys()),
         default=list(TABLE_DICT.keys())[:3],
-        help="Choose on-chain tables to analyze."
+        help="Choose the on-chain tables you want to analyze."
     )
     
-    # Build the union of available features (renamed with table prefix)
+    # Build the union of available features (with table prefix)
     available_features = []
     for tbl in selected_tables:
         tbl_info = TABLE_DICT[tbl]
@@ -538,9 +505,8 @@ with st.sidebar:
     else:
         ema_features = []
 
-
 ######################################
-# Data Query & Merge
+# Data Query & Merge for Correlation
 ######################################
 df_list = []
 for tbl in selected_tables:
@@ -553,7 +519,7 @@ for tbl in selected_tables:
     if not features_to_query:
         continue
     
-    # Map to raw col names
+    # Map to raw column names (remove prefix)
     raw_cols = [feat.split(":", 1)[1] for feat in features_to_query]
     cols_for_query = ", ".join(raw_cols)
 
@@ -562,14 +528,14 @@ for tbl in selected_tables:
             CAST({date_col} AS DATE) AS DATE,
             {cols_for_query}
         FROM {tbl_info['table_name']}
-        WHERE CAST({date_col} AS DATE) >= '{start_date}'
+        WHERE CAST({date_col} AS DATE) >= '{start_date_corr}'
     """
-    if end_date:
-        query += f" AND CAST({date_col} AS DATE) <= '{end_date}'\n"
+    if end_date_corr:
+        query += f" AND CAST({date_col} AS DATE) <= '{end_date_corr}'\n"
     query += "ORDER BY DATE"
 
     df_temp = session.sql(query).to_pandas()
-    # Rename raw columns to keep them unique
+    # Rename raw columns to keep them unique (using raw column names)
     rename_dict = {col: col for col in raw_cols}
     df_temp.rename(columns=rename_dict, inplace=True)
     df_list.append(df_temp)
@@ -592,13 +558,11 @@ if apply_ema:
         if feature in merged_df.columns:
             ema_col = f"EMA_{feature}"
             merged_df[ema_col] = merged_df[feature].ewm(span=ema_period).mean()
-            # Replace raw feature with the EMA values
             merged_df[feature] = merged_df[ema_col]
             merged_df.drop(columns=[ema_col], inplace=True)
 
-
 ######################################
-# Compute Correlation / MIC
+# Compute Correlation Matrix (Pearson or Spearman)
 ######################################
 st.subheader(f"{corr_method} Correlation Matrix Heatmap")
 
@@ -606,17 +570,15 @@ df_for_corr = merged_df.drop(columns=["DATE"]).copy()
 
 if corr_method == "Pearson":
     corr_matrix = df_for_corr.corr(method="pearson")
-elif corr_method == "Spearman":
+else:  # Spearman
     corr_matrix = df_for_corr.corr(method="spearman")
-else:  # "MIC"
-    corr_matrix = compute_mic_matrix(df_for_corr)
 
 num_features = len(corr_matrix.columns)
 fig_width = max(8, num_features * 0.8)
 fig_height = max(6, num_features * 0.8)
 fig, ax = plt.subplots(figsize=(fig_width, fig_height))
 
-# Dark background
+# Dark theme for the heatmap
 fig.patch.set_facecolor("black")
 ax.set_facecolor("black")
 
@@ -624,22 +586,21 @@ sns.heatmap(
     corr_matrix,
     annot=True,
     cmap="RdBu_r",
-    vmin=-1 if corr_method in ["Pearson", "Spearman"] else 0,  # MIC is always [0,1], but let's keep a nice color range
+    vmin=-1,
     vmax=1,
     square=True,
     ax=ax,
     fmt=".2f",
     cbar_kws={'shrink': 0.75, 'label': 'Correlation'}
 )
-
-ax.set_title(f"{corr_method} Matrix of On-chain Features", color="white")
+ax.set_title(f"{corr_method} Correlation Matrix of On-chain Features", color="white")
 plt.xticks(rotation=45, ha="right", color="white")
 plt.yticks(rotation=0, color="white")
 
 st.pyplot(fig)
 
 ######################################
-# Optionally Save Plot on White Background
+# Option to Save Plot on White Background
 ######################################
 if st.button("Save Correlation Plot (White Background)"):
     fig_save, ax_save = plt.subplots(figsize=(fig_width, fig_height))
@@ -650,14 +611,14 @@ if st.button("Save Correlation Plot (White Background)"):
         corr_matrix,
         annot=True,
         cmap="RdBu_r",
-        vmin=-1 if corr_method in ["Pearson", "Spearman"] else 0,
+        vmin=-1,
         vmax=1,
         square=True,
         ax=ax_save,
         fmt=".2f",
         cbar_kws={'shrink': 0.75, 'label': 'Correlation'}
     )
-    ax_save.set_title(f"{corr_method} Matrix of On-chain Features", color="black")
+    ax_save.set_title(f"{corr_method} Correlation Matrix of On-chain Features", color="black")
     plt.xticks(rotation=45, ha="right", color="black")
     plt.yticks(rotation=0, color="black")
     
