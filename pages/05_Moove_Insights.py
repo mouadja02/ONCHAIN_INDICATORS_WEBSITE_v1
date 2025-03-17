@@ -341,8 +341,11 @@ TABLE_DICT = {
     },
     "EXCHANGE_FLOW": {
         "table_name": "BTC_DATA.DATA.EXCHANGE_FLOW",
-        "date_col": "DATE",
-        "numeric_cols": ["INFLOW", "OUTFLOW", "NETFLOW"]
+        "date_col": "DAY",
+        "numeric_cols": [
+            "INFLOW_BTC", "OUTFLOW_BTC", "NETFLOW_BTC", "EXCHANGE_RESERVE_BTC",
+            "INFLOW_USD", "OUTFLOW_USD", "NETFLOW_USD", "EXCHANGE_RESERVE_USD"
+        ]
     },
     "HOLDER REALIZED PRICES": {
         "table_name": "BTC_DATA.DATA.HOLDER_REALIZED_PRICES",
@@ -355,9 +358,9 @@ TABLE_DICT = {
         "numeric_cols": ["MVRV"]
     },
     "MVRV WITH HOLDER TYPES": {
-        "table_name": "BTC_DATA.DATA.MVRV_WITH_HOLDER_TYPES",
+        "table_name": "BTC_DATA.DATA.MVRV_HOLDERS",
         "date_col": "DATE",
-        "numeric_cols": ["OVERALL_MVRV", "STH_MVRV", "LTH_MVRV"]
+        "numeric_cols": ["STH_MVRV", "LTH_MVRV"]
     },
     "NUPL": {
         "table_name": "BTC_DATA.DATA.NUPL",
@@ -385,9 +388,9 @@ TABLE_DICT = {
         "numeric_cols": ["SOPR"]
     },
     "SOPR WITH HOLDER TYPES": {
-        "table_name": "BTC_DATA.DATA.SOPR_WITH_HOLDER_TYPES",
+        "table_name": "BTC_DATA.DATA.SOPR_HOLDERS",
         "date_col": "DATE",
-        "numeric_cols": ["OVERALL_SOPR", "STH_SOPR", "LTH_SOPR"]
+        "numeric_cols": ["STH_SOPR", "LTH_SOPR"]
     },
     "STOCK TO FLOW MODEL": {
         "table_name": "BTC_DATA.DATA.STOCK_TO_FLOW_MODEL",
@@ -398,11 +401,6 @@ TABLE_DICT = {
         "table_name": "BTC_DATA.DATA.TX_COUNT",
         "date_col": "DATE",
         "numeric_cols": ["TX_COUNT"]
-    },
-    "TX VOLUME": {
-        "table_name": "BTC_DATA.DATA.TX_VOLUME",
-        "date_col": "DATE",
-        "numeric_cols": ["DAILY_TX_VOLUME_BTC"]
     },
     "TX BANDS": {
         "table_name": "BTC_DATA.DATA.TX_BANDS",
@@ -416,10 +414,57 @@ TABLE_DICT = {
             "TX_GT_100000_BTC"
             ]
     },
-    "FEAR & GREED INDEX": {
-        "table_name": "BTC_DATA.DATA.FEAR_GREED_INDEX",
+        "TRADE VOLUME": {
+        "table_name": "BTC_DATA.DATA.TRADE_VOLUME",
         "date_col": "DATE",
-        "numeric_cols": ["FNG_VALUE"]
+        "numeric_cols": [ "TRADE_VOLUME","DOMINANCE"]
+    },
+    "GOOGLE TREND": {
+        "table_name": "BTC_DATA.DATA.google_trend",
+        "date_col": "DATE",
+        "numeric_cols": [ "INDEX"]
+    },
+    "FINANCIAL MARKET DATA": {
+        "table_name": "BTC_DATA.DATA.Financial_Market_Data",
+        "date_col": "DATE",
+        "numeric_cols": [
+            "NASDAQ",
+            "SP500",
+            "VIX",
+            "DXY",
+            "IWM",
+            "QQQ",
+            "TLT",
+            "GOLD",
+            "PETROL"
+        ]
+    },
+    "XRP Price": {
+        "table_name": "BTC_DATA.DATA.XRP_PRICE_USD",
+        "date_col": "DATE",
+        "numeric_cols": [ "XRP_PRICE_USD"]
+    },
+    "TWITTER SENTIMENT": {
+        "table_name": "BTC_DATA.DATA.TWITTER_SENTIMENT",
+        "date_col": "DATE",
+        "numeric_cols": [
+            "TWITTER_FOMO",
+            "TWITTER_BULLISH",
+            "TWITTER_BEARISH",
+            "TWITTER_FEARFUL_CONCERNED",
+            "TWITTER_PRICE"
+        ]
+    },    
+    "REDDIT SENTIMENT": {
+        "table_name": "BTC_DATA.DATA.REDDIT_SENTIMENT",
+        "date_col": "DATE",
+        "numeric_cols": [
+            "REDDIT_FOMO",
+            "REDDIT_BULLISH",
+            "REDDIT_BEARISH",
+            "REDDIT_FEARFUL_CONCERNED",
+            "REDDIT_PRICE"
+        ]
     },
 }
 ######################################
@@ -570,7 +615,7 @@ plt.yticks(rotation=0, color="white")
 st.pyplot(fig)
 
 
-"""
+
 import io
 
 ######################################
@@ -634,4 +679,3 @@ if st.button("Save Correlation Plot (White Background)"):
     st.download_button("Download Plot as PNG", data=buf, file_name="correlation_heatmap.png", mime="image/png")
     
     plt.close(fig_save)
-"""
