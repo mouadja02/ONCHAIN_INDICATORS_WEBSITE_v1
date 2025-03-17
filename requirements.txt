@@ -9,4 +9,3 @@ ruptures
 matplotlib
 seaborn
 kaleido
-minepy
