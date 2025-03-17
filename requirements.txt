@@ -3,9 +3,8 @@
 streamlit
 requests
 pandas
-plotly>=5.10.0
+plotly
 datetime
 ruptures
 matplotlib
 seaborn
-kaleido
