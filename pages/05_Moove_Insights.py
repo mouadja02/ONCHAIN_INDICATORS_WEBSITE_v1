@@ -421,27 +421,10 @@ TABLE_DICT = {
         "date_col": "DATE",
         "numeric_cols": [ "XRP_PRICE_USD"]
     },
-    "TWITTER SENTIMENT": {
-        "table_name": "BTC_DATA.DATA.TWITTER_SENTIMENT",
+    "FEAR & GREED INDEX": {
+        "table_name": "BTC_DATA.DATA.FEAR_GREED_INDEX",
         "date_col": "DATE",
-        "numeric_cols": [
-            "TWITTER_FOMO",
-            "TWITTER_BULLISH",
-            "TWITTER_BEARISH",
-            "TWITTER_FEARFUL_CONCERNED",
-            "TWITTER_PRICE"
-        ]
-    },
-    "REDDIT SENTIMENT": {
-        "table_name": "BTC_DATA.DATA.REDDIT_SENTIMENT",
-        "date_col": "DATE",
-        "numeric_cols": [
-            "REDDIT_FOMO",
-            "REDDIT_BULLISH",
-            "REDDIT_BEARISH",
-            "REDDIT_FEARFUL_CONCERNED",
-            "REDDIT_PRICE"
-        ]
+        "numeric_cols": ["FNG_VALUE"]
     },
 }
 
