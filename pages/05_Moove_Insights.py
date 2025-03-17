@@ -370,7 +370,7 @@ TABLE_DICT = {
         "numeric_cols": ["STH_SOPR", "LTH_SOPR"]
     },
     "STOCK TO FLOW MODEL": {
-        "table_name": "BTC_DATA.DATA.STOCK_TO_FLOW_MODEL",
+        "table_name": "BTC_DATA.DATA.STOCK_TO_FLOW",
         "date_col": "DATE",
         "numeric_cols": ["STOCK", "FLOW", "STOCK_TO_FLOW", "MODEL_PRICE"]
     },
