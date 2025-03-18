@@ -167,6 +167,13 @@ TABLE_DICT = {
         "date_col": "CREATED_TIMESTAMP",
         "numeric_cols": ["BTC_VALUE"]
     },
+    "M2 GROWTH": {
+        "table_name": "BTC_DATA.DATA.m2_growth",
+        "date_col": "DATE",
+        "numeric_cols": [
+            "M2_Growth_YoY", "M2_Global_Supply"
+        ]
+    },
     "PUELL MULTIPLE": {
         "table_name": "BTC_DATA.DATA.PUELL_MULTIPLE",
         "date_col": "DATE",
