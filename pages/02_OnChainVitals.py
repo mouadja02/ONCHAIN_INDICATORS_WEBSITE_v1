@@ -168,10 +168,10 @@ TABLE_DICT = {
         "numeric_cols": ["BTC_VALUE"]
     },
     "M2 GROWTH": {
-        "table_name": "BTC_DATA.DATA.m2_growth",
+        "table_name": "BTC_DATA.DATA.M2_GROWTH",
         "date_col": "DATE",
         "numeric_cols": [
-            "M2_Growth_YoY", "M2_Global_Supply"
+            "M2_GROWTH_YOY", "M2_GLOBAL_SUPPLY"
         ]
     },
     "PUELL MULTIPLE": {
