@@ -354,6 +354,13 @@ TABLE_DICT = {
             "PUELL_MULTIPLE"
         ]
     },
+    "M2 GROWTH": {
+        "table_name": "BTC_DATA.DATA.m2_growth",
+        "date_col": "DATE",
+        "numeric_cols": [
+            "M2_Growth_YoY", "M2_Global_Supply"
+        ]
+    },
     "REALIZED_CAP_VS_MARKET_CAP": {
         "table_name": "BTC_DATA.DATA.REALIZED_CAP_VS_MARKET_CAP",
         "date_col": "DATE",
