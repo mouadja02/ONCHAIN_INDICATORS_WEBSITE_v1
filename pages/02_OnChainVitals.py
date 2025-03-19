@@ -49,18 +49,7 @@ st.markdown(css_style, unsafe_allow_html=True)
 ######################################
 # 2) Snowflake Connection
 ######################################
-cx = st.connection(
-    "",
-    type="snowflake",
-    account="vulyokn-irb92128",
-    user="InternProject",
-    password="ThisISInternAccount2002",
-    role="SYSADMIN",
-    warehouse="BG_WH",
-    database="BTC_DATA",
-    schema="DATA",
-    authenticator="snowflake",
-)
+cx = st.connection("snowflake")
 session = cx.session()
 
 ######################################
