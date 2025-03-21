@@ -1,110 +1,477 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
+import plotly.graph_objects as go
+from plotly.subplots import make_subplots
+import plotly.express as px
 import matplotlib.pyplot as plt
-import snowflake.connector
+import seaborn as sns
+import datetime
+import random
+import calendar
+import io
+import math
 
-# -----------------------------------------------------------------------------
-# 1. Connexion à Snowflake (exemple minimal - adaptez selon vos identifiants)
-# -----------------------------------------------------------------------------
-def load_data_from_snowflake():
-    # Remplacez par vos propres identifiants
-    cx = st.connection("snowflake")
-    session = cx.session()
-    query = """
-        SELECT * 
-        FROM BTC_DATA.DATA.BTC_ALL_INDICATORS_STATES
-        ORDER BY date_week
-    """
-    df = session.sql(query).to_pandas()
-    return df
+from sklearn.ensemble import RandomForestRegressor
+from sklearn.model_selection import train_test_split
+from sklearn.metrics import mean_squared_error
 
-# -----------------------------------------------------------------------------
-# 2. Chargement et préparation des données
-# -----------------------------------------------------------------------------
-st.title("Correlation Dashboard - BTC Price Movement & Indicators")
-
-@st.cache_data  # Cache Streamlit pour éviter de recharger à chaque rafraîchissement
-def load_data():
-    return load_data_from_snowflake()
-
-df = load_data()
-
-st.write("Aperçu des données (BTC_ALL_INDICATORS_STATES) :")
-st.dataframe(df.head(10))
-
-# La colonne du mouvement de prix (par défaut)
-price_col = "PRICE_MOVEMENT_STATE"
-
-# -----------------------------------------------------------------------------
-# 3. Barre latérale : sélection des indicateurs
-# -----------------------------------------------------------------------------
-all_state_cols = [col for col in df.columns 
-                  if col.endswith("_STATE") and col != price_col]
-
-st.sidebar.write("## Choisissez les indicateurs à inclure dans la corrélation :")
-selected_indicators = st.sidebar.multiselect(
-    "Indicateurs on-chain (états discrets)",
-    options=all_state_cols,
-    default=all_state_cols[:5]  # Exemple : on en sélectionne 5 par défaut
+######################################
+# 1) Page Configuration & Dark Theme
+######################################
+st.set_page_config(
+    page_title="Bitcoin Price Movement Dashboard",
+    layout="wide",
+    initial_sidebar_state="expanded"
 )
 
-import io
+st.markdown(
+    """
+    <style>
+    body { background-color: #000000; color: #f0f2f6; }
+    .css-18e3th9, .css-1dp5vir, .css-12oz5g7, .st-bq {
+        background-color: #000000 !important;
+    }
+    .css-15zrgzn, .css-1hynb2t, .css-1xh633b, .css-17eq0hr {
+        color: #f0f2f6;
+    }
+    .css-1xh633b a { color: #1FA2FF; }
+    </style>
+    """,
+    unsafe_allow_html=True
+)
 
-# -----------------------------------------------------------------------------
-# 4. Construction de la matrice de corrélation
-# -----------------------------------------------------------------------------
-if not selected_indicators:
-    st.warning("Veuillez sélectionner au moins un indicateur.")
+######################################
+# 2) Snowflake Connection
+######################################
+cx = st.connection("snowflake")
+session = cx.session()
+
+######################################
+# 3) Define Color Palette & Session State
+######################################
+COLOR_PALETTE = [
+    "#E74C3C", "#F1C40F", "#2ECC71", "#3498DB", "#9B59B6",
+    "#1ABC9C", "#E67E22", "#FF00FF", "#FF1493", "#FFD700"
+]
+
+if "color_palette" not in st.session_state:
+    st.session_state["color_palette"] = COLOR_PALETTE.copy()
+    random.shuffle(st.session_state["color_palette"])
+
+######################################
+# 5) Page Title
+######################################
+st.title("Correlation Matrix of On-chain Features")
+
+######################################
+# (A) Table Configurations
+######################################
+TABLE_DICT = {
+    "ACTIVE ADDRESSES": {
+        "table_name": "BTC_DATA.DATA.ACTIVE_ADDRESSES",
+        "date_col": "DATE", 
+        "numeric_cols": ["ACTIVE_ADDRESSES"]
+    },
+    "REALIZED CAP AND PRICE": {
+        "table_name": "BTC_DATA.DATA.BTC_REALIZED_CAP_AND_PRICE",
+        "date_col": "DATE",
+        "numeric_cols": [
+            "REALIZED_PRICE_USD",
+            "TOTAL_UNSPENT_BTC"
+        ]
+    },
+    "BTC PRICE": {
+        "table_name": "BTC_DATA.DATA.BTC_PRICE_USD",
+        "date_col": "DATE",
+        "numeric_cols": [
+            "BTC_PRICE_USD"
+        ]
+    },
+    "CDD": {
+        "table_name": "BTC_DATA.DATA.CDD",
+        "date_col": "DATE",
+        "numeric_cols": ["CDD_RAW"]
+    },
+    "EXCHANGE_FLOW": {
+        "table_name": "BTC_DATA.DATA.EXCHANGE_FLOW",
+        "date_col": "DAY",
+        "numeric_cols": [
+            "INFLOW_BTC", "OUTFLOW_BTC", "NETFLOW_BTC", "EXCHANGE_RESERVE_BTC"
+        ]
+    },
+    "HOLDER REALIZED PRICES": {
+        "table_name": "BTC_DATA.DATA.HOLDER_REALIZED_PRICES",
+        "date_col": "DATE",
+        "numeric_cols": ["STH_REALIZED_PRICE", "LTH_REALIZED_PRICE"]
+    },
+    "MVRV": {
+        "table_name": "BTC_DATA.DATA.MVRV",
+        "date_col": "DATE",
+        "numeric_cols": ["MVRV"]
+    },
+    "MVRV WITH HOLDER TYPES": {
+        "table_name": "BTC_DATA.DATA.MVRV_HOLDERS",
+        "date_col": "DATE",
+        "numeric_cols": ["STH_MVRV", "LTH_MVRV"]
+    },
+    "NUPL": {
+        "table_name": "BTC_DATA.DATA.NUPL",
+        "date_col": "DATE",
+        "numeric_cols": ["NUPL", "NUPL_PERCENT"]
+    },
+    "PUELL MULTIPLE": {
+        "table_name": "BTC_DATA.DATA.PUELL_MULTIPLE",
+        "date_col": "DATE",
+        "numeric_cols": [
+            "MINTED_BTC",
+            "PUELL_MULTIPLE"
+        ]
+    },
+    "M2 GROWTH": {
+        "table_name": "BTC_DATA.DATA.M2_GROWTH",
+        "date_col": "DATE",
+        "numeric_cols": [
+            "M2_GROWTH_YOY", "M2_GLOBAL_SUPPLY"
+        ]
+    },
+    "SOPR": {
+        "table_name": "BTC_DATA.DATA.SOPR",
+        "date_col": "DATE",
+        "numeric_cols": ["SOPR"]
+    },
+    "SOPR WITH HOLDER TYPES": {
+        "table_name": "BTC_DATA.DATA.SOPR_HOLDERS",
+        "date_col": "DATE",
+        "numeric_cols": ["STH_SOPR", "LTH_SOPR"]
+    },
+    "STOCK TO FLOW MODEL": {
+        "table_name": "BTC_DATA.DATA.STOCK_TO_FLOW",
+        "date_col": "DATE",
+        "numeric_cols": ["STOCK", "FLOW", "STOCK_TO_FLOW_RATIO"]
+    },
+    "TX COUNT": {
+        "table_name": "BTC_DATA.DATA.TX_COUNT",
+        "date_col": "DATE",
+        "numeric_cols": ["TX_COUNT"]
+    },
+    "TRADE VOLUME": {
+        "table_name": "BTC_DATA.DATA.TRADE_VOLUME",
+        "date_col": "DATE",
+        "numeric_cols": [ "TRADE_VOLUME", "DOMINANCE"]
+    },
+    "GOOGLE TREND": {
+        "table_name": "BTC_DATA.DATA.GOOGLE_TREND",
+        "date_col": "DATE",
+        "numeric_cols": [ "INDEX"]
+    },
+    "FINANCIAL MARKET DATA": {
+        "table_name": "BTC_DATA.DATA.FINANCIAL_MARKET_DATA",
+        "date_col": "DATE",
+        "numeric_cols": [
+            "NASDAQ",
+            "SP500",
+            "VIX",
+            "DXY",
+            "IWM",
+            "QQQ",
+            "TLT",
+            "GOLD",
+            "PETROL"
+        ]
+    },
+    "FEAR & GREED INDEX": {
+        "table_name": "BTC_DATA.DATA.FEAR_GREED_INDEX",
+        "date_col": "DATE",
+        "numeric_cols": ["FNG_VALUE"]
+    },  
+    "MINERS REVENUE": {
+        "table_name": "BTC_DATA.DATA.MINERS_REVENUE",
+        "date_col": "DATE",
+        "numeric_cols": [
+            "MINER_REVENUE"
+        ]
+    },    
+    "DAILY HASHRATE": {
+        "table_name": "BTC_DATA.DATA.DAILY_HASHRATE",
+        "date_col": "DATE",
+        "numeric_cols": [
+            "HASHRATE_THS"
+        ]
+    },    
+    "NETWORK DIFFICULTY": {
+        "table_name": "BTC_DATA.DATA.NETWORK_DIFFICULTY",
+        "date_col": "DATE",
+        "numeric_cols": [
+            "AVG_DIFFICULTY"
+        ]
+    },
+}
+
+######################################
+# (B) Sidebar Controls for Correlation Settings
+######################################
+with st.sidebar:
+    st.header("Correlation Settings")
+
+    # Date range selection for correlation data
+    default_corr_start = datetime.date(2015, 1, 1)
+    start_date_corr = st.date_input("Start Date (corr)", value=default_corr_start, key="corr_start_date")
+
+    activate_end_date_corr = st.checkbox("Activate End Date (corr)", value=False, key="corr_activate_end")
+    if activate_end_date_corr:
+        default_corr_end = datetime.date.today()
+        end_date_corr = st.date_input("End Date (corr)", value=default_corr_end, key="corr_end_date")
+    else:
+        end_date_corr = None
+
+    # Correlation method
+    corr_method = st.selectbox(
+        "Select Correlation Method:",
+        ["pearson", "spearman"],
+        index=0,
+        help="Spearman (rank-based) may detect monotonic relationships better."
+    )
+
+    st.markdown("---")
+
+    st.subheader("1. Choose Indicators")
+    all_tables = list(TABLE_DICT.keys())
+    default_selected = ["BTC PRICE"] 
+
+    selected_tables = st.multiselect(
+        "Select tables to include:",
+        all_tables,
+        default=default_selected,
+        help="Choose which on-chain data tables you want to analyze."
+    )
+
+    available_features = []
+    for tbl in selected_tables:
+        tbl_info = TABLE_DICT[tbl]
+        for col in tbl_info["numeric_cols"]:
+            available_features.append(f"{tbl}:{col}")
+
+    if "BTC PRICE:BTC_PRICE_USD" not in available_features:
+        available_features.append("BTC PRICE:BTC_PRICE_USD")
+
+    selected_features = st.multiselect(
+        "Select Features for Correlation:",
+        available_features,
+        default=available_features, 
+        key="selected_features"
+    )
+
+    st.markdown("---")
+
+    st.subheader("2. Define Non-negative Shifts (Days)")
+    st.markdown(
+        "A shift of 1 aligns *yesterday’s data* to *today’s date*. "
+        "No negative shifts are allowed—i.e., we cannot use future data."
+    )
+
+    shifts = {}
+    for feat in selected_features:
+        # We do NOT allow shifting BTC PRICE
+        if feat == "BTC PRICE:BTC_PRICE_USD":
+            shifts[feat] = 0 
+        else:
+            label = f"Lag (days) for {feat}"
+            shifts[feat] = st.slider(label, 0, 30, 0)
+
+    st.markdown("---")
+
+######################################
+# (C) Data Query & Merge for Correlation
+######################################
+df_list = []
+for tbl_feat in selected_features:
+    tbl, col = tbl_feat.split(":", 1)
+    tbl_info = TABLE_DICT[tbl]
+
+    date_col = tbl_info["date_col"]
+    query = f"""
+        SELECT
+            CAST({date_col} AS DATE) AS DATE,
+            {col}
+        FROM {tbl_info['table_name']}
+        WHERE CAST({date_col} AS DATE) >= '{start_date_corr}'
+    """
+    if end_date_corr:
+        query += f" AND CAST({date_col} AS DATE) <= '{end_date_corr}'"
+    query += " ORDER BY DATE"
+
+    df_temp = session.sql(query).to_pandas()
+
+    # Rename the data column to the combined feature name (e.g. "BTC PRICE:BTC_PRICE_USD")
+    df_temp.rename(columns={col: tbl_feat}, inplace=True)
+    df_list.append(df_temp)
+
+# Merge all data frames on DATE
+if not df_list:
+    st.error("No data returned for the selected features.")
+    st.stop()
+
+merged_df = df_list[0]
+for df_other in df_list[1:]:
+    merged_df = pd.merge(merged_df, df_other, on="DATE", how="outer")
+
+# Sort by date
+merged_df.sort_values("DATE", inplace=True)
+merged_df = merged_df.dropna(how="all")
+
+# Apply the user-defined shifts
+for feat, shift_val in shifts.items():
+    if feat in merged_df.columns and shift_val > 0:
+        merged_df[feat] = merged_df[feat].shift(shift_val)
+
+# After shifting, remove rows at top that are now NaN
+merged_df.dropna(how="any", inplace=True)
+
+######################################
+# (D) Compute Correlation
+######################################
+st.subheader(f"{corr_method} Correlation Matrix (Lagged Indicators)")
+
+df_for_corr = merged_df.drop(columns=["DATE"]).copy()
+
+if corr_method == "pearson":
+    corr_matrix = df_for_corr.corr(method="pearson")
 else:
-    # Include the price column plus the selected indicators
-    cols_for_corr = [price_col] + selected_indicators
-    corr_data = df[cols_for_corr].corr()  # Pearson correlation matrix
+    corr_matrix = df_for_corr.corr(method="spearman")
 
-    st.write("### Matrice de corrélation")
-    st.dataframe(corr_data)
+num_features = len(corr_matrix.columns)
+fig_width = max(8, num_features * 0.8)
+fig_height = max(6, num_features * 0.8)
+fig, ax = plt.subplots(figsize=(fig_width, fig_height))
 
-    # Determine figure size based on number of features
-    num_features = len(cols_for_corr)
-    fig_width = max(8, num_features * 0.8)
-    fig_height = max(6, num_features * 0.8)
-    fig, ax = plt.subplots(figsize=(fig_width, fig_height))
-    
-    # Set dark background (like in the seaborn version)
-    fig.patch.set_facecolor("black")
-    ax.set_facecolor("black")
-    
-    # Display the correlation matrix using imshow with similar parameters as sns.heatmap
-    im = ax.imshow(corr_data, cmap="RdBu_r", vmin=-1, vmax=1, aspect="equal")
-    
-    # Set ticks with white labels
-    ax.set_xticks(np.arange(len(cols_for_corr)))
-    ax.set_yticks(np.arange(len(cols_for_corr)))
-    ax.set_xticklabels(cols_for_corr, rotation=45, ha="right", color="black")
-    ax.set_yticklabels(cols_for_corr, color="black")
-    
-    # Annotate each cell with the correlation value (formatted to 2 decimals)
-    for i in range(len(cols_for_corr)):
-        for j in range(len(cols_for_corr)):
-            ax.text(j, i, f"{corr_data.iloc[i, j]:.2f}",
-                    ha="center", va="center", color="white")
-    
-    # Add colorbar with a white label
-    cbar = plt.colorbar(im, ax=ax, shrink=0.75)
-    cbar.set_label("Correlation", color="white")
-    
-    # Set title in white
-    ax.set_title("Correlation Matrix of On-chain Features", color="white")
-    
-    fig.tight_layout()
-    st.pyplot(fig)
-    if st.button("Save Correlation Plot (White Background)"):
-    # Enregistrer la figure dans un buffer
-        buf = io.BytesIO()
-        fig.savefig(buf, format="png", bbox_inches="tight", facecolor="white")
-        buf.seek(0)
-        st.download_button("Download Plot as PNG", data=buf, file_name="correlation_heatmap.png", mime="image/png")
+# Dark theme for the heatmap
+fig.patch.set_facecolor("black")
+ax.set_facecolor("black")
+
+sns.heatmap(
+    corr_matrix,
+    annot=True,
+    cmap="RdBu_r",
+    vmin=-1,
+    vmax=1,
+    square=True,
+    ax=ax,
+    fmt=".2f",
+    cbar_kws={'shrink': 0.75, 'label': 'Correlation'}
+)
+ax.set_title(f"{corr_method} Correlation Matrix of On-chain Features (Non-negative Lags)", color="white")
+plt.xticks(rotation=45, ha="right", color="white")
+plt.yticks(rotation=0, color="white")
+
+st.pyplot(fig)
+
+######################################
+# (E) Option to Save Plot on White Background
+######################################
+if st.button("Save Correlation Plot (White Background)"):
+    fig_save, ax_save = plt.subplots(figsize=(fig_width, fig_height))
+    fig_save.patch.set_facecolor("white")
+    ax_save.set_facecolor("white")
+
+    sns.heatmap(
+        corr_matrix,
+        annot=True,
+        cmap="RdBu_r",
+        vmin=-1,
+        vmax=1,
+        square=True,
+        ax=ax_save,
+        fmt=".2f",
+        cbar_kws={'shrink': 0.75, 'label': 'Correlation'}
+    )
+    ax_save.set_title(f"{corr_method} Correlation Matrix (Non-negative Lags)", color="black")
+    plt.xticks(rotation=45, ha="right", color="black")
+    plt.yticks(rotation=0, color="black")
+
+    buf = io.BytesIO()
+    fig_save.savefig(buf, format="png", bbox_inches="tight", facecolor="white")
+    buf.seek(0)
+    st.download_button(
+        "Download Plot as PNG",
+        data=buf,
+        file_name=f"correlation_heatmap_{corr_method}.png",
+        mime="image/png"
+    )
+    plt.close(fig_save)
+
+######################################
+# (F) FEATURE SELECTION
+######################################
+st.subheader("Feature Selection for BTC Price Prediction")
+
+target_col = "BTC PRICE:BTC_PRICE_USD"
+
+max_feats = len(df_for_corr.columns) - 1 if target_col in df_for_corr.columns else len(df_for_corr.columns)
+num_features_to_select = st.slider(
+    "Number of top features to select",
+    min_value=1,
+    max_value=max_feats if max_feats >= 1 else 1,
+    value=min(5, max_feats)
+)
+
+selection_method = st.selectbox(
+    "Select Feature-Selection Method:",
+    ["Correlation-based", "RandomForest-based"]
+)
+
+st.markdown("""
+In **Correlation-based** selection, we pick the top features by absolute correlation to BTC Price.
+In **RandomForest-based** selection, we train a light Random Forest to predict BTC Price from all
+other features, and rank features by their importance scores.
+""")
+
+if st.button("Run Feature Selection"):
+    df_no_date = merged_df.drop(columns=["DATE"]).copy()
+    if target_col not in df_no_date.columns:
+        st.warning(f"Target column '{target_col}' not found in data. Cannot select features.")
+    else:
+        if selection_method == "Correlation-based":
+            corrs_to_target = df_no_date.corr(method=corr_method)[target_col].drop(labels=[target_col])
+            ranked = corrs_to_target.abs().sort_values(ascending=False)
+            best_feats = ranked.head(num_features_to_select).index.tolist()
+
+            st.write(f"**Top {num_features_to_select} features by absolute correlation:**")
+            for feat in best_feats:
+                st.write(f"{feat}: correlation = {corrs_to_target[feat]:.4f}")
         
-        plt.close(fig)
+        else:
+            # 2) Model-based (Random Forest)
+            X = df_no_date.drop(columns=[target_col])
+            y = df_no_date[target_col]
+            if len(X) < 10:
+                st.warning("Not enough data rows to run Random Forest-based feature selection.")
+            else:
+                X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, shuffle=False)
+                rf_model = RandomForestRegressor(
+                    n_estimators=2000,
+                    max_depth=6,
+                    min_samples_leaf=5,
+                    random_state=42
+                )
+                rf_model.fit(X_train, y_train)
+                importances = rf_model.feature_importances_
+                feature_names = X.columns.tolist()
+                feat_imp_pairs = sorted(zip(feature_names, importances), key=lambda x: x[1], reverse=True)
+                best_feats = [f[0] for f in feat_imp_pairs[:num_features_to_select]]
+
+                st.write(f"**Top {num_features_to_select} features by RandomForest importance:**")
+                for (feat, imp) in feat_imp_pairs[:num_features_to_select]:
+                    st.write(f"{feat}: importance = {imp:.4f}")
 
 
+                # Optional: Evaluate quickly
+                y_pred = rf_model.predict(X_test)
+                mse = mean_squared_error(y_test, y_pred)
+                rmse = math.sqrt(mse)
+                print("RMSE:", rmse)
+                st.write(f"Random Forest test RMSE: {rmse:.2f}")
+
+        st.write("---")
+        st.write("**Selected features:**", best_feats)
+        st.info("You can feed these features into your DQN or other ML pipeline!")
