@@ -8,10 +8,6 @@ import random
 import io
 import math
 
-from sklearn.ensemble import RandomForestRegressor
-from sklearn.model_selection import train_test_split
-from sklearn.metrics import mean_squared_error
-
 ######################################
 # 1) Page Configuration & Dark Theme
 ######################################
@@ -37,6 +33,7 @@ st.markdown(
     unsafe_allow_html=True
 )
 
+
 ######################################
 # 2) Snowflake Connection
 ######################################
@@ -55,8 +52,14 @@ if "color_palette" not in st.session_state:
     st.session_state["color_palette"] = COLOR_PALETTE.copy()
     random.shuffle(st.session_state["color_palette"])
 
+# We'll store in session_state a dictionary for "plot_lines", 
+# where each key=feature_name, value=DataFrame with "DATE" + the final transformed column.
+if "plot_lines" not in st.session_state:
+    st.session_state["plot_lines"] = {}  # { feature_name : pd.DataFrame(...), ... }
+
+
 ######################################
-# 4) Table Configurations
+# 4) Table / Feature Mappings
 ######################################
 TABLE_DICT = {
     "ACTIVE ADDRESSES": {
@@ -198,6 +201,7 @@ TABLE_DICT = {
         ]
     },
 }
+
 
 ######################################
 # 5) Page Title
