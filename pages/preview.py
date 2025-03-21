@@ -266,7 +266,7 @@ with st.sidebar:
         if feat == "BTC PRICE:BTC_PRICE_USD":
             continue
         st.write(f"**{feat}**")
-        shift_val = st.slider(f"Lag (days) for {feat}", 0, 30, 0, key=f"shift_{feat}")
+        shift_val = st.slider(f"Lag (days) for {feat}", -30, 30, 0, key=f"shift_{feat}")
         shifts[feat] = shift_val
         deriv_flag = st.checkbox(f"Take derivative of {feat}?", key=f"deriv_{feat}", value=False)
         derivatives[feat] = deriv_flag
