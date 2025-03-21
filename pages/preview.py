@@ -118,7 +118,7 @@ TABLE_DICT = {
     "NUPL": {
         "table_name": "BTC_DATA.DATA.NUPL",
         "date_col": "DATE",
-        "numeric_cols": ["NUPL", "NUPL_PERCENT"]
+        "numeric_cols": ["NUPL"]
     },
     "PUELL MULTIPLE": {
         "table_name": "BTC_DATA.DATA.PUELL_MULTIPLE",
