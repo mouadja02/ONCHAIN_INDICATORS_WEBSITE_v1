@@ -466,14 +466,16 @@ if merged_df is not None and not merged_df.empty:
                 name=feat,
                 line=dict(color=next(color_iter, "tab:blue"))
             ))
-        fig_multi.update_layout(
-            title="Multi-line Plot of Selected Features",
-            xaxis_title="Date",
-            yaxis_title="Value",
-            paper_bgcolor="white",
-            plot_bgcolor="white",
-            legend=dict(x=0.01, y=0.99)
-        )
+            fig_multi.update_layout(
+                title="Multi-line Plot of Selected Features",
+                xaxis_title="Date",
+                yaxis_title="Value",
+                paper_bgcolor="black",
+                plot_bgcolor="black",
+                legend=dict(x=0.01, y=0.99, font=dict(color="white")),
+                font=dict(color="white")
+            )
+
         st.plotly_chart(fig_multi, use_container_width=True)
     else:
         st.info("Please select at least one feature for the multi-line chart.")
