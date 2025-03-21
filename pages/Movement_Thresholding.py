@@ -80,12 +80,12 @@ nbins_slider = st.sidebar.slider(
 # 4.1) Load the BTC price movement percentage from Snowflake
 query_movement = f"""
 SELECT
-    WEEK_START,
+    DATE,
     AVG_PRICE,
     PREV_AVG,
     (AVG_PRICE - PREV_AVG)/NULLIF(PREV_AVG, 0) * 100 AS PRICE_MOVEMENT_PERCENT
 FROM BTC_PRICE_MOVEMENT_PERCENTAGE
-WHERE PREV_AVG IS NOT NULL AND WEEK_START > '{hist_start_date_str}'
+WHERE PREV_AVG IS NOT NULL AND DATE > '{hist_start_date_str}'
 """
 df_movement = session.sql(query_movement).to_pandas()
 
@@ -131,7 +131,7 @@ st.plotly_chart(fig_hist, use_container_width=True)
 
 # 4.6) Display table of movements with categories
 st.subheader("BTC Price Movements With Classification")
-st.dataframe(df_movement[["WEEK_START", "AVG_PRICE", "PREV_AVG", "PRICE_MOVEMENT_PERCENT", "Movement_Category"]])
+st.dataframe(df_movement[["DATE", "AVG_PRICE", "PREV_AVG", "PRICE_MOVEMENT_PERCENT", "Movement_Category"]])
 
 ######################################
 # 5) (Optional) Load and Display Absolute BTC Price
