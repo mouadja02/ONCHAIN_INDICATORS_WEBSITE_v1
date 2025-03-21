@@ -1,14 +1,10 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
-import plotly.graph_objects as go
-from plotly.subplots import make_subplots
-import plotly.express as px
 import matplotlib.pyplot as plt
 import seaborn as sns
 import datetime
 import random
-import calendar
 import io
 import math
 
@@ -60,12 +56,7 @@ if "color_palette" not in st.session_state:
     random.shuffle(st.session_state["color_palette"])
 
 ######################################
-# 5) Page Title
-######################################
-st.title("Correlation Matrix of On-chain Features (Option to Use Derivatives)")
-
-######################################
-# (A) Table Configurations
+# 4) Table Configurations
 ######################################
 TABLE_DICT = {
     "ACTIVE ADDRESSES": {
@@ -209,7 +200,7 @@ TABLE_DICT = {
 }
 
 ######################################
-# (B) Sidebar Controls for Correlation Settings
+# 5) Sidebar for Correlation, Lags, Derivative, and Plotting
 ######################################
 with st.sidebar:
     st.header("Correlation Settings")
@@ -272,7 +263,7 @@ with st.sidebar:
     derivatives = {}
 
     # For the BTC PRICE specifically, we have a separate checkbox for derivative
-    st.write("**BTC PRICE:BTC_PRICE_USD** - top-level derivative checkbox, no shift allowed.")
+    st.write("**BTC PRICE:BTC_PRICE_USD** (no shift, but can do derivative)")
     derive_btc_price = st.checkbox("Take derivative of BTC PRICE?", value=False)
     # Force shift=0 for BTC Price
     shifts["BTC PRICE:BTC_PRICE_USD"] = 0
@@ -295,8 +286,22 @@ with st.sidebar:
 
         st.markdown("---")
 
+    # 3) Plotting the final features
+    st.subheader("Plot Final Series")
+    plot_start_default = datetime.date(2016, 1, 1)
+    plot_start = st.date_input("Plot Start Date", value=plot_start_default)
+    activate_plot_end = st.checkbox("Set Plot End Date", value=False)
+    if activate_plot_end:
+        plot_end = st.date_input("Plot End Date", value=datetime.date.today())
+    else:
+        plot_end = None
+
+    # Button to generate the multi-line plot
+    do_plot = st.button("Plot Selected Features")
+
+
 ######################################
-# (C) Data Query & Merge for Correlation
+# (C) Data Query & Merge
 ######################################
 df_list = []
 for tbl_feat in selected_features:
@@ -325,34 +330,37 @@ if not df_list:
     st.error("No data returned for the selected features.")
     st.stop()
 
-# Merge on DATE
 merged_df = df_list[0]
 for df_other in df_list[1:]:
     merged_df = pd.merge(merged_df, df_other, on="DATE", how="outer")
 
-# Sort + drop rows that are all NaN
 merged_df.sort_values("DATE", inplace=True)
 merged_df.dropna(how="all", inplace=True)
 
+######################################
 # 1) Apply derivatives
+######################################
 for feat, do_deriv in derivatives.items():
     if do_deriv and feat in merged_df.columns:
         merged_df[feat] = merged_df[feat].diff()
 
-# Drop first row of each derived column
+# remove the first row that is NaN for each derived column
 all_derived_feats = [f for f, val in derivatives.items() if val]
 if all_derived_feats:
     merged_df.dropna(subset=all_derived_feats, how="any", inplace=True)
 
+######################################
 # 2) Apply shifts
+######################################
 for feat, shift_val in shifts.items():
     if feat in merged_df.columns and shift_val > 0:
         merged_df[feat] = merged_df[feat].shift(shift_val)
 
+# remove rows that are now NaN from shifting
 merged_df.dropna(how="any", inplace=True)
 
 ######################################
-# (D) Compute Correlation
+# (D) Correlation Calculation
 ######################################
 st.subheader(f"{corr_method.capitalize()} Correlation Matrix (Lagged/Derived Indicators)")
 
@@ -394,7 +402,7 @@ plt.yticks(rotation=0, color="white")
 st.pyplot(fig)
 
 ######################################
-# (E) Option to Save Plot on White Background
+# (E) Save Plot Button
 ######################################
 if st.button("Save Correlation Plot (White Background)"):
     fig_save, ax_save = plt.subplots(figsize=(fig_width, fig_height))
@@ -428,12 +436,11 @@ if st.button("Save Correlation Plot (White Background)"):
     plt.close(fig_save)
 
 ######################################
-# (F) FEATURE SELECTION
+# (F) Feature Selection
 ######################################
 st.subheader("Feature Selection for BTC Price Prediction")
 
 target_col = "BTC PRICE:BTC_PRICE_USD"
-
 max_feats = len(df_for_corr.columns) - 1 if target_col in df_for_corr.columns else len(df_for_corr.columns)
 if max_feats < 1:
     st.warning("Cannot do feature selection because there's no target or not enough columns.")
@@ -506,35 +513,40 @@ if st.button("Run Feature Selection"):
         st.info("You can feed these features into your DQN or other ML pipeline!")
 
 ######################################
-# (G) Plot Transformed Data
+# (G) Multi-line Plot of Final Transformed Data
 ######################################
-st.subheader("Plot Transformed Data Over Time")
-
-plot_start = st.date_input("Plot Start Date", value=datetime.date(2015,1,1), key="plot_start_date")
-plot_end = st.date_input("Plot End Date", value=datetime.date.today(), key="plot_end_date")
-
-if st.button("Plot Chosen Features"):
-    # We have 'merged_df' with final transformations (shifts & derivatives).
+if do_plot:
+    # We have the final merged_df after all transformations
     df_plot = merged_df.copy()
-    # Filter by the user-chosen plot date range
-    mask = (df_plot["DATE"] >= pd.to_datetime(plot_start)) & (df_plot["DATE"] <= pd.to_datetime(plot_end))
-    df_plot = df_plot.loc[mask].copy()
-    if len(df_plot) < 2:
-        st.warning("Not enough data in the chosen date range to plot.")
-    else:
-        # We'll plot all columns (except 'DATE') on the same y-axis
-        # For correlation, a single axis is typical, but keep in mind different scales.
-        fig2, ax2 = plt.subplots(figsize=(10, 6))
-        # sort by date to ensure correct line
-        df_plot.sort_values("DATE", inplace=True)
-        for col in df_plot.columns:
-            if col == "DATE":
-                continue
-            ax2.plot(df_plot["DATE"], df_plot[col], label=col)
 
-        ax2.legend()
-        ax2.set_title("Transformed Feature Time Series")
-        ax2.set_xlabel("Date")
-        ax2.set_ylabel("Value")
-        plt.xticks(rotation=45)
-        st.pyplot(fig2)
+    # Filter by user-chosen start_date and end_date for plotting
+    if plot_start:
+        df_plot = df_plot[df_plot["DATE"] >= pd.to_datetime(plot_start)]
+    if activate_plot_end and plot_end:
+        df_plot = df_plot[df_plot["DATE"] <= pd.to_datetime(plot_end)]
+
+    if df_plot.empty:
+        st.warning("No data to plot in the selected date range.")
+    else:
+        # We'll plot all selected_features in one chart, raw
+        # Because each feature might be on different scale, but user wants them "in the same plot"
+        fig_line, ax_line = plt.subplots(figsize=(10, 5))
+
+        # To avoid color collisions, reuse session state's color palette
+        color_iter = iter(st.session_state["color_palette"])
+
+        for feat in selected_features:
+            if feat not in df_plot.columns:
+                continue
+            c = next(color_iter, "tab:blue")
+            # If we run out of color_iter, reuse tab:blue or reset
+            ax_line.plot(df_plot["DATE"], df_plot[feat], label=feat, color=c)
+
+        ax_line.set_xlabel("Date")
+        ax_line.set_ylabel("Value")
+        ax_line.set_title("Multi-line Plot of Selected Features (after Lag/Derivative)")
+        ax_line.legend()
+        ax_line.grid(True)
+
+        st.pyplot(fig_line)
+        plt.close(fig_line)
