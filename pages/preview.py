@@ -200,28 +200,31 @@ TABLE_DICT = {
 }
 
 ######################################
-# 5) Sidebar for Correlation, Lags, Derivative, and Plotting
+# 5) Page Title
+######################################
+st.title("Correlation Matrix + On‐demand Plot of Lagged/Derived Features")
+
+######################################
+# (A) Correlation Settings in Sidebar
 ######################################
 with st.sidebar:
     st.header("Correlation Settings")
 
-    # 1) Date range selection for correlation data
     default_corr_start = datetime.date(2015, 1, 1)
-    start_date_corr = st.date_input("Start Date (corr)", value=default_corr_start, key="corr_start_date")
+    start_date_corr = st.date_input("Start Date (corr)", value=default_corr_start)
 
-    activate_end_date_corr = st.checkbox("Activate End Date (corr)", value=False, key="corr_activate_end")
+    activate_end_date_corr = st.checkbox("Activate End Date (corr)", value=False)
     if activate_end_date_corr:
         default_corr_end = datetime.date.today()
-        end_date_corr = st.date_input("End Date (corr)", value=default_corr_end, key="corr_end_date")
+        end_date_corr = st.date_input("End Date (corr)", value=default_corr_end)
     else:
         end_date_corr = None
 
-    # 2) Correlation method
+    # Correlation method
     corr_method = st.selectbox(
         "Select Correlation Method:",
         ["pearson", "spearman"],
-        index=0,
-        help="Spearman (rank-based) may detect monotonic relationships better."
+        index=0
     )
 
     st.markdown("---")
@@ -229,185 +232,162 @@ with st.sidebar:
     st.subheader("1. Choose Indicators")
     all_tables = list(TABLE_DICT.keys())
     default_selected = ["BTC PRICE"] 
-
     selected_tables = st.multiselect(
         "Select tables to include:",
         all_tables,
         default=default_selected,
-        help="Choose which on-chain data tables you want to analyze."
     )
 
-    # Build the full list of available features from selected tables
+    # Build the full list of available features
     available_features = []
     for tbl in selected_tables:
-        tbl_info = TABLE_DICT[tbl]
-        for col in tbl_info["numeric_cols"]:
-            available_features.append(f"{tbl}:{col}")
+        for col in TABLE_DICT[tbl]["numeric_cols"]:
+            feat_name = f"{tbl}:{col}"
+            available_features.append(feat_name)
 
-    # Always ensure BTC PRICE is in the list
     if "BTC PRICE:BTC_PRICE_USD" not in available_features:
         available_features.append("BTC PRICE:BTC_PRICE_USD")
 
     selected_features = st.multiselect(
         "Select Features for Correlation:",
         available_features,
-        default=available_features, 
-        key="selected_features"
+        default=available_features
     )
 
     st.markdown("---")
-    st.subheader("2. Lag & Derivative Per Feature")
 
-    # A dictionary to store shift (lag) and derivative settings
+    st.subheader("2. Lag & Derivative per Feature, plus Plot Button")
+
+    # We'll create placeholders to store user-chosen shift and derivative for each feature
     shifts = {}
     derivatives = {}
 
-    # For the BTC PRICE specifically, we have a separate checkbox for derivative
-    st.write("**BTC PRICE:BTC_PRICE_USD** (no shift, but can do derivative)")
-    derive_btc_price = st.checkbox("Take derivative of BTC PRICE?", value=False)
-    # Force shift=0 for BTC Price
-    shifts["BTC PRICE:BTC_PRICE_USD"] = 0
-    derivatives["BTC PRICE:BTC_PRICE_USD"] = derive_btc_price
-    st.markdown("---")
+    # We create a function so we can apply transformations and store them in session state
+    def plot_button_callback(feature):
+        """
+        Called when user clicks the 'Plot' button next to a feature. 
+        We'll retrieve the final data for that single feature (with chosen shift/derivative),
+        then store it in session_state['plot_lines'] for later multi-line plotting.
+        """
+        # 1) Query data
+        tbl, col = feature.split(":", 1)
+        tbl_info = TABLE_DICT[tbl]
+        date_col = tbl_info["date_col"]
 
-    # For all other features, we show a slider (lag) and a checkbox for derivative
+        query_start = start_date_corr
+        query_end = end_date_corr
+
+        query = f"""
+            SELECT
+                CAST({date_col} AS DATE) AS DATE,
+                {col}
+            FROM {tbl_info['table_name']}
+            WHERE CAST({date_col} AS DATE) >= '{query_start}'
+        """
+        if query_end:
+            query += f" AND CAST({date_col} AS DATE) <= '{query_end}'"
+        query += " ORDER BY DATE"
+
+        df_temp = session.sql(query).to_pandas()
+        df_temp.rename(columns={col: feature}, inplace=True)
+
+        df_temp.sort_values("DATE", inplace=True)
+        df_temp.dropna(subset=[feature], how="any", inplace=True)
+
+        # 2) Apply derivative if asked
+        if derivatives[feature]:
+            df_temp[feature] = df_temp[feature].diff()
+            df_temp.dropna(subset=[feature], how="any", inplace=True)
+
+        # 3) Apply shift
+        shift_val = shifts[feature]
+        if shift_val > 0:
+            df_temp[feature] = df_temp[feature].shift(shift_val)
+            df_temp.dropna(subset=[feature], how="any", inplace=True)
+
+        # Now we store the result in session_state so we can plot them all together
+        df_temp.reset_index(drop=True, inplace=True)
+
+        # Save to session state
+        st.session_state["plot_lines"][feature] = df_temp[["DATE", feature]]
+
+        st.success(f"Plotted {feature} with shift={shift_val}, deriv={derivatives[feature]}")
+
+    # Now for each selected feature, we show a row with a slider, checkbox, and a plot button
     for feat in selected_features:
+        # SHIFT
         if feat == "BTC PRICE:BTC_PRICE_USD":
-            continue  # already handled above
+            # Force shift=0, but derivative optional
+            st.write(f"**{feat}** (no shift, derivative optional)")
+            derivatives[feat] = st.checkbox(f"Take derivative of {feat}?", key=f"deriv_{feat}", value=False)
+            shifts[feat] = 0
+            # Plot button
+            if st.button(f"Plot {feat}", key=f"plotbtn_{feat}"):
+                plot_button_callback(feat)
+            st.markdown("---")
+        else:
+            st.write(f"**{feat}**")
+            shift_val = st.slider(f"Lag (days) for {feat}", 0, 30, 0, key=f"shift_{feat}")
+            shifts[feat] = shift_val
+            derivatives[feat] = st.checkbox(f"Take derivative of {feat}?", key=f"deriv_{feat}", value=False)
+            if st.button(f"Plot {feat}", key=f"plotbtn_{feat}"):
+                plot_button_callback(feat)
+            st.markdown("---")
 
-        st.write(f"**{feat}**")
-        # Shift slider
-        shift_val = st.slider(f"Lag (days) for {feat}", 0, 30, 0)
-        shifts[feat] = shift_val
+######################################
+# (B) Build Correlation Matrix from all final transforms
+######################################
 
-        # Derivative checkbox
-        derive_flag = st.checkbox(f"Take derivative of {feat}?", value=False)
-        derivatives[feat] = derive_flag
+# We can do correlation only on the final set of features that the user plotted,
+# each stored in st.session_state["plot_lines"]. We merge them by DATE.
+# But if you prefer correlation on all selected features at once, ignoring the separate plot lines,
+# see the original approach. We'll do it on all features at once in the final approach.
 
-        st.markdown("---")
+st.header("Final Merged Data & Correlation")
 
-    # 3) Plotting the final features
-    st.subheader("Plot Final Series")
-    plot_start_default = datetime.date(2016, 1, 1)
-    plot_start = st.date_input("Plot Start Date", value=plot_start_default)
-    activate_plot_end = st.checkbox("Set Plot End Date", value=False)
-    if activate_plot_end:
-        plot_end = st.date_input("Plot End Date", value=datetime.date.today())
+if len(st.session_state["plot_lines"]) < 2:
+    st.info("Please plot at least 2 features to compute correlation.")
+    st.stop()
+    
+# Merge all plotted lines on DATE
+df_merged_final = None
+for feat, df_feat in st.session_state["plot_lines"].items():
+    if df_merged_final is None:
+        df_merged_final = df_feat.copy()
     else:
-        plot_end = None
+        df_merged_final = pd.merge(df_merged_final, df_feat, on="DATE", how="outer")
 
-    # Button to generate the multi-line plot
-    do_plot = st.button("Plot Selected Features")
-
-
-######################################
-# (C) Data Query & Merge
-######################################
-df_list = []
-for tbl_feat in selected_features:
-    tbl, col = tbl_feat.split(":", 1)
-    tbl_info = TABLE_DICT[tbl]
-
-    date_col = tbl_info["date_col"]
-    query = f"""
-        SELECT
-            CAST({date_col} AS DATE) AS DATE,
-            {col}
-        FROM {tbl_info['table_name']}
-        WHERE CAST({date_col} AS DATE) >= '{start_date_corr}'
-    """
-    if end_date_corr:
-        query += f" AND CAST({date_col} AS DATE) <= '{end_date_corr}'"
-    query += " ORDER BY DATE"
-
-    df_temp = session.sql(query).to_pandas()
-
-    # Rename the data column to the combined feature name (e.g. "BTC PRICE:BTC_PRICE_USD")
-    df_temp.rename(columns={col: tbl_feat}, inplace=True)
-    df_list.append(df_temp)
-
-if not df_list:
-    st.error("No data returned for the selected features.")
+if df_merged_final is None or df_merged_final.empty:
+    st.warning("No data to display.")
     st.stop()
 
-merged_df = df_list[0]
-for df_other in df_list[1:]:
-    merged_df = pd.merge(merged_df, df_other, on="DATE", how="outer")
+df_merged_final.sort_values("DATE", inplace=True)
+df_merged_final.dropna(how="any", inplace=True)  # optional
 
-merged_df.sort_values("DATE", inplace=True)
-merged_df.dropna(how="all", inplace=True)
-
-######################################
-# 1) Apply derivatives
-######################################
-for feat, do_deriv in derivatives.items():
-    if do_deriv and feat in merged_df.columns:
-        merged_df[feat] = merged_df[feat].diff()
-
-# remove the first row that is NaN for each derived column
-all_derived_feats = [f for f, val in derivatives.items() if val]
-if all_derived_feats:
-    merged_df.dropna(subset=all_derived_feats, how="any", inplace=True)
-
-######################################
-# 2) Apply shifts
-######################################
-for feat, shift_val in shifts.items():
-    if feat in merged_df.columns and shift_val > 0:
-        merged_df[feat] = merged_df[feat].shift(shift_val)
-
-# remove rows that are now NaN from shifting
-merged_df.dropna(how="any", inplace=True)
-
-######################################
-# (D) Correlation Calculation
-######################################
-st.subheader(f"{corr_method.capitalize()} Correlation Matrix (Lagged/Derived Indicators)")
-
-df_for_corr = merged_df.drop(columns=["DATE"]).copy()
-
-if len(df_for_corr.columns) < 2:
-    st.warning("Not enough columns to compute correlation. Please select at least 2 features.")
+if len(df_merged_final.columns) < 2:
+    st.warning("Not enough columns to compute correlation. Need at least 2 features plotted.")
     st.stop()
 
-if corr_method == "pearson":
-    corr_matrix = df_for_corr.corr(method="pearson")
-else:
-    corr_matrix = df_for_corr.corr(method="spearman")
+st.write("## Data After Plot Selections")
+st.dataframe(df_merged_final)
 
-num_features = len(corr_matrix.columns)
-fig_width = max(8, num_features * 0.8)
-fig_height = max(6, num_features * 0.8)
-fig, ax = plt.subplots(figsize=(fig_width, fig_height))
+corr_method = st.selectbox("Correlation Method for Final Plotted Data:", ["pearson", "spearman"], index=0)
+df_for_corr = df_merged_final.drop(columns=["DATE"]).copy()
 
-# Dark theme for the heatmap
-fig.patch.set_facecolor("black")
-ax.set_facecolor("black")
+if len(df_for_corr.columns) >= 2:
+    if corr_method == "pearson":
+        corr_matrix = df_for_corr.corr(method="pearson")
+    else:
+        corr_matrix = df_for_corr.corr(method="spearman")
 
-sns.heatmap(
-    corr_matrix,
-    annot=True,
-    cmap="RdBu_r",
-    vmin=-1,
-    vmax=1,
-    square=True,
-    ax=ax,
-    fmt=".2f",
-    cbar_kws={'shrink': 0.75, 'label': 'Correlation'}
-)
-ax.set_title(f"{corr_method.capitalize()} Correlation Matrix of On-chain Features", color="white")
-plt.xticks(rotation=45, ha="right", color="white")
-plt.yticks(rotation=0, color="white")
+    num_features = len(corr_matrix.columns)
+    fig_width = max(8, num_features * 0.8)
+    fig_height = max(6, num_features * 0.8)
+    fig, ax = plt.subplots(figsize=(fig_width, fig_height))
 
-st.pyplot(fig)
-
-######################################
-# (E) Save Plot Button
-######################################
-if st.button("Save Correlation Plot (White Background)"):
-    fig_save, ax_save = plt.subplots(figsize=(fig_width, fig_height))
-    fig_save.patch.set_facecolor("white")
-    ax_save.set_facecolor("white")
+    # Dark theme for the heatmap
+    fig.patch.set_facecolor("black")
+    ax.set_facecolor("black")
 
     sns.heatmap(
         corr_matrix,
@@ -416,137 +396,85 @@ if st.button("Save Correlation Plot (White Background)"):
         vmin=-1,
         vmax=1,
         square=True,
-        ax=ax_save,
+        ax=ax,
         fmt=".2f",
         cbar_kws={'shrink': 0.75, 'label': 'Correlation'}
     )
-    ax_save.set_title(f"{corr_method.capitalize()} Correlation Matrix (Non-negative Lags)", color="black")
-    plt.xticks(rotation=45, ha="right", color="black")
-    plt.yticks(rotation=0, color="black")
+    ax.set_title(f"{corr_method.capitalize()} Correlation on Plotted Features", color="white")
+    plt.xticks(rotation=45, ha="right", color="white")
+    plt.yticks(rotation=0, color="white")
 
-    buf = io.BytesIO()
-    fig_save.savefig(buf, format="png", bbox_inches="tight", facecolor="white")
-    buf.seek(0)
-    st.download_button(
-        "Download Plot as PNG",
-        data=buf,
-        file_name=f"correlation_heatmap_{corr_method}.png",
-        mime="image/png"
-    )
-    plt.close(fig_save)
+    st.pyplot(fig)
+
+    if st.button("Save This Correlation Plot (White BG)"):
+        fig_save, ax_save = plt.subplots(figsize=(fig_width, fig_height))
+        fig_save.patch.set_facecolor("white")
+        ax_save.set_facecolor("white")
+
+        sns.heatmap(
+            corr_matrix,
+            annot=True,
+            cmap="RdBu_r",
+            vmin=-1,
+            vmax=1,
+            square=True,
+            ax=ax_save,
+            fmt=".2f",
+            cbar_kws={'shrink': 0.75, 'label': 'Correlation'}
+        )
+        ax_save.set_title(f"{corr_method.capitalize()} Correlation on Plotted Features", color="black")
+        plt.xticks(rotation=45, ha="right", color="black")
+        plt.yticks(rotation=0, color="black")
+
+        buf = io.BytesIO()
+        fig_save.savefig(buf, format="png", bbox_inches="tight", facecolor="white")
+        buf.seek(0)
+        st.download_button(
+            "Download Plot as PNG",
+            data=buf,
+            file_name=f"plotted_correlation_{corr_method}.png",
+            mime="image/png"
+        )
+        plt.close(fig_save)
 
 ######################################
-# (F) Feature Selection
+# (C) Multi-line Chart with All Plotted Features
 ######################################
-st.subheader("Feature Selection for BTC Price Prediction")
+st.header("Multi-line Chart of All Plotted Features")
 
-target_col = "BTC PRICE:BTC_PRICE_USD"
-max_feats = len(df_for_corr.columns) - 1 if target_col in df_for_corr.columns else len(df_for_corr.columns)
-if max_feats < 1:
-    st.warning("Cannot do feature selection because there's no target or not enough columns.")
-    st.stop()
-
-num_features_to_select = st.slider(
-    "Number of top features to select",
-    min_value=1,
-    max_value=max_feats if max_feats >= 1 else 1,
-    value=min(5, max_feats)
-)
-
-selection_method = st.selectbox(
-    "Select Feature-Selection Method:",
-    ["Correlation-based", "RandomForest-based"]
-)
-
-st.markdown("""
-In **Correlation-based** selection, we pick the top features by absolute correlation to BTC Price (or its derivative, if chosen).
-In **RandomForest-based** selection, we train a light Random Forest to predict BTC Price from all
-other features, and rank features by their importance scores.
-""")
-
-if st.button("Run Feature Selection"):
-    df_no_date = merged_df.drop(columns=["DATE"]).copy()
-    if target_col not in df_no_date.columns:
-        st.warning(f"Target column '{target_col}' not found in data. Cannot select features.")
-    else:
-        if selection_method == "Correlation-based":
-            corrs_to_target = df_no_date.corr(method=corr_method)[target_col].drop(labels=[target_col])
-            ranked = corrs_to_target.abs().sort_values(ascending=False)
-            best_feats = ranked.head(num_features_to_select).index.tolist()
-
-            st.write(f"**Top {num_features_to_select} features by absolute correlation:**")
-            for feat in best_feats:
-                st.write(f"{feat}: correlation = {corrs_to_target[feat]:.4f}")
-        
+if st.session_state["plot_lines"]:
+    df_plot_all = None
+    for feat, df_feat in st.session_state["plot_lines"].items():
+        if df_plot_all is None:
+            df_plot_all = df_feat.copy()
         else:
-            # 2) Model-based (Random Forest)
-            X = df_no_date.drop(columns=[target_col])
-            y = df_no_date[target_col]
-            if len(X) < 10:
-                st.warning("Not enough data rows to run Random Forest-based feature selection.")
-            else:
-                X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, shuffle=False)
-                rf_model = RandomForestRegressor(
-                    n_estimators=2000,
-                    max_depth=6,
-                    min_samples_leaf=5,
-                    random_state=42
-                )
-                rf_model.fit(X_train, y_train)
-                importances = rf_model.feature_importances_
-                feature_names = X.columns.tolist()
-                feat_imp_pairs = sorted(zip(feature_names, importances), key=lambda x: x[1], reverse=True)
-                best_feats = [f[0] for f in feat_imp_pairs[:num_features_to_select]]
+            df_plot_all = pd.merge(df_plot_all, df_feat, on="DATE", how="outer")
+    if df_plot_all is not None and not df_plot_all.empty:
+        df_plot_all.sort_values("DATE", inplace=True)
+        df_plot_all.dropna(how="any", inplace=True)
 
-                st.write(f"**Top {num_features_to_select} features by RandomForest importance:**")
-                for (feat, imp) in feat_imp_pairs[:num_features_to_select]:
-                    st.write(f"{feat}: importance = {imp:.4f}")
+        if len(df_plot_all.columns) > 1:
+            fig_all, ax_all = plt.subplots(figsize=(10,6))
+            fig_all.patch.set_facecolor("white")
+            ax_all.set_facecolor("white")
 
-                # Evaluate quickly
-                y_pred = rf_model.predict(X_test)
-                mse = mean_squared_error(y_test, y_pred)
-                rmse = math.sqrt(mse)
-                st.write(f"Random Forest test RMSE: {rmse:.2f}")
+            color_iter = iter(st.session_state["color_palette"])
 
-        st.write("---")
-        st.write("**Selected features:**", best_feats)
-        st.info("You can feed these features into your DQN or other ML pipeline!")
+            for col in df_plot_all.columns:
+                if col == "DATE":
+                    continue
+                c = next(color_iter, "tab:blue")
+                ax_all.plot(df_plot_all["DATE"], df_plot_all[col], label=col, color=c)
 
-######################################
-# (G) Multi-line Plot of Final Transformed Data
-######################################
-if do_plot:
-    # We have the final merged_df after all transformations
-    df_plot = merged_df.copy()
-
-    # Filter by user-chosen start_date and end_date for plotting
-    if plot_start:
-        df_plot = df_plot[df_plot["DATE"] >= pd.to_datetime(plot_start)]
-    if activate_plot_end and plot_end:
-        df_plot = df_plot[df_plot["DATE"] <= pd.to_datetime(plot_end)]
-
-    if df_plot.empty:
-        st.warning("No data to plot in the selected date range.")
+            ax_all.set_xlabel("Date")
+            ax_all.set_ylabel("Value")
+            ax_all.set_title("All Plotted Features (Lag/Deriv) on Single Chart")
+            ax_all.grid(True)
+            ax_all.legend()
+            st.pyplot(fig_all)
+        else:
+            st.warning("Not enough columns to plot.")
     else:
-        # We'll plot all selected_features in one chart, raw
-        # Because each feature might be on different scale, but user wants them "in the same plot"
-        fig_line, ax_line = plt.subplots(figsize=(10, 5))
-
-        # To avoid color collisions, reuse session state's color palette
-        color_iter = iter(st.session_state["color_palette"])
-
-        for feat in selected_features:
-            if feat not in df_plot.columns:
-                continue
-            c = next(color_iter, "tab:blue")
-            # If we run out of color_iter, reuse tab:blue or reset
-            ax_line.plot(df_plot["DATE"], df_plot[feat], label=feat, color=c)
-
-        ax_line.set_xlabel("Date")
-        ax_line.set_ylabel("Value")
-        ax_line.set_title("Multi-line Plot of Selected Features (after Lag/Derivative)")
-        ax_line.legend()
-        ax_line.grid(True)
-
-        st.pyplot(fig_line)
-        plt.close(fig_line)
+        st.warning("df_plot_all is empty or None.")
+else:
+    st.info("No features have been plotted yet. Click 'Plot' beside each feature to add them.")
