@@ -379,6 +379,39 @@ else:
     st.pyplot(fig_corr)
 
 ######################################
+# Option to Save Plot on White Background
+######################################
+if st.button("Save Correlation Plot (White Background)"):
+    fig_save, ax_save = plt.subplots(figsize=(fig_width, fig_height))
+    fig_save.patch.set_facecolor("white")
+    ax_save.set_facecolor("white")
+    
+    sns.heatmap(
+        corr_matrix,
+        annot=True,
+        cmap="RdBu_r",
+        vmin=-1,
+        vmax=1,
+        square=True,
+        ax=ax_save,
+        fmt=".2f",
+        cbar_kws={'shrink': 0.75, 'label': 'Correlation'}
+    )
+    ax_save.set_title(f"{corr_method} Correlation Matrix of On-chain Features", color="black")
+    plt.xticks(rotation=45, ha="right", color="black")
+    plt.yticks(rotation=0, color="black")
+    
+    buf = io.BytesIO()
+    fig_save.savefig(buf, format="png", bbox_inches="tight", facecolor="white")
+    buf.seek(0)
+    st.download_button(
+        "Download Plot as PNG",
+        data=buf,
+        file_name=f"correlation_heatmap_{corr_method}.png",
+        mime="image/png"
+    )
+    plt.close(fig_save)
+######################################
 # (D) Interactive Plotly Chart (BTC Price vs. Interactive Indicator)
 ######################################
 st.subheader("Interactive Plot: BTC Price vs. Indicator")
