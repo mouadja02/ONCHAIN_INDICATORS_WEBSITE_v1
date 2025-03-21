@@ -246,13 +246,14 @@ with st.sidebar:
         help="Choose which on-chain data tables you want to analyze."
     )
 
+    # Build the full list of available features from selected tables
     available_features = []
     for tbl in selected_tables:
         tbl_info = TABLE_DICT[tbl]
         for col in tbl_info["numeric_cols"]:
             available_features.append(f"{tbl}:{col}")
 
-    # Always ensure BTC PRICE is included
+    # Always ensure BTC PRICE is in the list
     if "BTC PRICE:BTC_PRICE_USD" not in available_features:
         available_features.append("BTC PRICE:BTC_PRICE_USD")
 
@@ -294,7 +295,6 @@ with st.sidebar:
 
         st.markdown("---")
 
-
 ######################################
 # (C) Data Query & Merge for Correlation
 ######################################
@@ -321,35 +321,34 @@ for tbl_feat in selected_features:
     df_temp.rename(columns={col: tbl_feat}, inplace=True)
     df_list.append(df_temp)
 
-# Merge all data frames on DATE
 if not df_list:
     st.error("No data returned for the selected features.")
     st.stop()
 
+# Merge on DATE
 merged_df = df_list[0]
 for df_other in df_list[1:]:
     merged_df = pd.merge(merged_df, df_other, on="DATE", how="outer")
 
-# Sort by date
+# Sort + drop rows that are all NaN
 merged_df.sort_values("DATE", inplace=True)
-merged_df = merged_df.dropna(how="all")
+merged_df.dropna(how="all", inplace=True)
 
-# 1) Apply derivatives if requested
+# 1) Apply derivatives
 for feat, do_deriv in derivatives.items():
     if do_deriv and feat in merged_df.columns:
         merged_df[feat] = merged_df[feat].diff()
 
-# drop first row of each derived column that is now NaN
-all_derived_feats = [f for f, val in derivatives.items() if val]  # only those that are derived
+# Drop first row of each derived column
+all_derived_feats = [f for f, val in derivatives.items() if val]
 if all_derived_feats:
     merged_df.dropna(subset=all_derived_feats, how="any", inplace=True)
 
-# 2) Apply the user-defined shifts
+# 2) Apply shifts
 for feat, shift_val in shifts.items():
     if feat in merged_df.columns and shift_val > 0:
         merged_df[feat] = merged_df[feat].shift(shift_val)
 
-# After shifting, remove rows at top that are now NaN
 merged_df.dropna(how="any", inplace=True)
 
 ######################################
@@ -479,10 +478,6 @@ if st.button("Run Feature Selection"):
             if len(X) < 10:
                 st.warning("Not enough data rows to run Random Forest-based feature selection.")
             else:
-                from sklearn.ensemble import RandomForestRegressor
-                from sklearn.model_selection import train_test_split
-                from sklearn.metrics import mean_squared_error
-
                 X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, shuffle=False)
                 rf_model = RandomForestRegressor(
                     n_estimators=2000,
@@ -509,3 +504,37 @@ if st.button("Run Feature Selection"):
         st.write("---")
         st.write("**Selected features:**", best_feats)
         st.info("You can feed these features into your DQN or other ML pipeline!")
+
+######################################
+# (G) Plot Transformed Data
+######################################
+st.subheader("Plot Transformed Data Over Time")
+
+plot_start = st.date_input("Plot Start Date", value=datetime.date(2015,1,1), key="plot_start_date")
+plot_end = st.date_input("Plot End Date", value=datetime.date.today(), key="plot_end_date")
+
+if st.button("Plot Chosen Features"):
+    # We have 'merged_df' with final transformations (shifts & derivatives).
+    df_plot = merged_df.copy()
+    # Filter by the user-chosen plot date range
+    mask = (df_plot["DATE"] >= pd.to_datetime(plot_start)) & (df_plot["DATE"] <= pd.to_datetime(plot_end))
+    df_plot = df_plot.loc[mask].copy()
+    if len(df_plot) < 2:
+        st.warning("Not enough data in the chosen date range to plot.")
+    else:
+        # We'll plot all columns (except 'DATE') on the same y-axis
+        # For correlation, a single axis is typical, but keep in mind different scales.
+        fig2, ax2 = plt.subplots(figsize=(10, 6))
+        # sort by date to ensure correct line
+        df_plot.sort_values("DATE", inplace=True)
+        for col in df_plot.columns:
+            if col == "DATE":
+                continue
+            ax2.plot(df_plot["DATE"], df_plot[col], label=col)
+
+        ax2.legend()
+        ax2.set_title("Transformed Feature Time Series")
+        ax2.set_xlabel("Date")
+        ax2.set_ylabel("Value")
+        plt.xticks(rotation=45)
+        st.pyplot(fig2)
