@@ -246,14 +246,13 @@ with st.sidebar:
         help="Choose which on-chain data tables you want to analyze."
     )
 
-    # Build the full list of available features from selected tables
     available_features = []
     for tbl in selected_tables:
         tbl_info = TABLE_DICT[tbl]
         for col in tbl_info["numeric_cols"]:
             available_features.append(f"{tbl}:{col}")
 
-    # Always ensure BTC PRICE is in the list
+    # Always ensure BTC PRICE is included
     if "BTC PRICE:BTC_PRICE_USD" not in available_features:
         available_features.append("BTC PRICE:BTC_PRICE_USD")
 
@@ -265,41 +264,35 @@ with st.sidebar:
     )
 
     st.markdown("---")
+    st.subheader("2. Lag & Derivative Per Feature")
 
-    st.subheader("2. Define Lag & Derivative for Each Feature")
-    st.markdown(
-        "For each feature, you can choose how many days to lag, and whether to apply a derivative. "
-        "Derivative = day-to-day change (first difference)."
-    )
-
-    # A dictionary to store the shift and derivative settings
+    # A dictionary to store shift (lag) and derivative settings
     shifts = {}
     derivatives = {}
 
-    # A separate top-level checkbox specifically for BTC PRICE derivative
-    btc_derive_price = st.checkbox("Apply derivative to BTC PRICE?")
+    # For the BTC PRICE specifically, we have a separate checkbox for derivative
+    st.write("**BTC PRICE:BTC_PRICE_USD** - top-level derivative checkbox, no shift allowed.")
+    derive_btc_price = st.checkbox("Take derivative of BTC PRICE?", value=False)
+    # Force shift=0 for BTC Price
+    shifts["BTC PRICE:BTC_PRICE_USD"] = 0
+    derivatives["BTC PRICE:BTC_PRICE_USD"] = derive_btc_price
+    st.markdown("---")
 
+    # For all other features, we show a slider (lag) and a checkbox for derivative
     for feat in selected_features:
-        # If feature is the BTC PRICE
         if feat == "BTC PRICE:BTC_PRICE_USD":
-            # Force shift=0, derivative as set by top-level checkbox
-            st.markdown(f"**{feat}** –– (Lag=0 forced, derivative controlled by top-level checkbox above)")
-            shifts[feat] = 0
-            derivatives[feat] = btc_derive_price
-            st.markdown("---")
-        else:
-            # This is a non-BTC feature, we allow a shift slider
-            shift_label = f"Lag (days) for {feat}"
-            shift_val = st.slider(shift_label, 0, 30, 0)
-            shifts[feat] = shift_val
+            continue  # already handled above
 
-            # Also a checkbox to decide derivative or not
-            derive_label = f"Take derivative of {feat}?"
-            derive_flag = st.checkbox(derive_label, value=False)
-            derivatives[feat] = derive_flag
+        st.write(f"**{feat}**")
+        # Shift slider
+        shift_val = st.slider(f"Lag (days) for {feat}", 0, 30, 0)
+        shifts[feat] = shift_val
 
-            st.markdown("---")
+        # Derivative checkbox
+        derive_flag = st.checkbox(f"Take derivative of {feat}?", value=False)
+        derivatives[feat] = derive_flag
 
+        st.markdown("---")
 
 
 ######################################
@@ -341,15 +334,17 @@ for df_other in df_list[1:]:
 merged_df.sort_values("DATE", inplace=True)
 merged_df = merged_df.dropna(how="all")
 
-# Optionally apply derivatives first
-if enable_derivatives and derivative_targets:
-    for feat in derivative_targets:
-        if feat in merged_df.columns:
-            merged_df[feat] = merged_df[feat].diff()
-    # Drop the first row which has NaN due to diff()
-    merged_df.dropna(subset=derivative_targets, how="any", inplace=True)
+# 1) Apply derivatives if requested
+for feat, do_deriv in derivatives.items():
+    if do_deriv and feat in merged_df.columns:
+        merged_df[feat] = merged_df[feat].diff()
 
-# Apply the user-defined shifts
+# drop first row of each derived column that is now NaN
+all_derived_feats = [f for f, val in derivatives.items() if val]  # only those that are derived
+if all_derived_feats:
+    merged_df.dropna(subset=all_derived_feats, how="any", inplace=True)
+
+# 2) Apply the user-defined shifts
 for feat, shift_val in shifts.items():
     if feat in merged_df.columns and shift_val > 0:
         merged_df[feat] = merged_df[feat].shift(shift_val)
