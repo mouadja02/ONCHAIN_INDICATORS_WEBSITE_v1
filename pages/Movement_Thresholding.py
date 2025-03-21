@@ -65,7 +65,7 @@ std_slider = st.sidebar.slider(
 no_change_threshold = st.sidebar.slider(
     "No-Change Threshold (%)",
     min_value=0.0,
-    max_value=2.0,
+    max_value=20.0,
     value=0.5,
     step=0.1
 )
