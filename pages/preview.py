@@ -434,8 +434,10 @@ else:
         )
         fig.update_xaxes(
             showgrid=True, gridcolor="grey", zeroline=False, linecolor="white", 
-            tickfont=dict(color="white"), titlefont=dict(color="white")
+            tickfont=dict(color="white")
         )
+        
+
         fig.update_yaxes(showgrid=True, gridcolor="grey")
         st.plotly_chart(fig, use_container_width=True)
 
