@@ -266,7 +266,7 @@ with st.sidebar:
         if feat == "BTC PRICE:BTC_PRICE_USD":
             continue
         st.write(f"**{feat}**")
-        shift_val = st.slider(f"Lag (days) for {feat}", -30, 30, 0, key=f"shift_{feat}")
+        shift_val = st.slider(f"Lag (days) for {feat}", 0, 30, 0, key=f"shift_{feat}")
         shifts[feat] = shift_val
         deriv_flag = st.checkbox(f"Take derivative of {feat}?", key=f"deriv_{feat}", value=False)
         derivatives[feat] = deriv_flag
@@ -581,17 +581,15 @@ if do_lag_corr:
         correlations = []
         
         for lag in lag_values:
-            # We handle lag by shifting the *indicator* column
-            # If lag > 0 => shift forward => indicator lags behind price
-            # If lag < 0 => shift backward => indicator leads price
             df_temp = df_merge_lag.copy()
             if lag != 0:
-                df_temp[chosen_indicator_lag] = df_temp[chosen_indicator_lag].shift(lag)
+                # Invert the lag value: negative slider means indicator from the past
+                df_temp[chosen_indicator_lag] = df_temp[chosen_indicator_lag].shift(-lag)
             
-            # Drop rows with NaNs introduced by shift
+            # Drop rows with NaNs introduced by the shift
             df_temp.dropna(inplace=True)
             
-            # If there's enough data left
+            # If there's enough data left, calculate correlation
             if len(df_temp) > 1:
                 if corr_method == "pearson":
                     corr_val = df_temp[[btc_feat_name, chosen_indicator_lag]].corr(method="pearson").iloc[0,1]
@@ -601,6 +599,7 @@ if do_lag_corr:
                 corr_val = np.nan
             
             correlations.append(corr_val)
+
         
         # Build a dataframe for plotting
         df_lag_corr = pd.DataFrame({
