@@ -132,7 +132,7 @@ TABLE_DICT = {
         "table_name": "BTC_DATA.DATA.M2_GROWTH",
         "date_col": "DATE",
         "numeric_cols": [
-            "M2_GROWTH_YOY", "M2_GLOBAL_SUPPLY"
+            "M2_GLOBAL_SUPPLY"
         ]
     },
     "SOPR": {
