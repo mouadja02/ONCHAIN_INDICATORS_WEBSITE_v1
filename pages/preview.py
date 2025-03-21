@@ -214,7 +214,7 @@ TABLE_DICT = {
 with st.sidebar:
     st.header("Correlation Settings")
 
-    # Date range selection for correlation data
+    # 1) Date range selection for correlation data
     default_corr_start = datetime.date(2015, 1, 1)
     start_date_corr = st.date_input("Start Date (corr)", value=default_corr_start, key="corr_start_date")
 
@@ -225,7 +225,7 @@ with st.sidebar:
     else:
         end_date_corr = None
 
-    # Correlation method
+    # 2) Correlation method
     corr_method = st.selectbox(
         "Select Correlation Method:",
         ["pearson", "spearman"],
@@ -246,13 +246,14 @@ with st.sidebar:
         help="Choose which on-chain data tables you want to analyze."
     )
 
+    # Build the full list of available features from selected tables
     available_features = []
     for tbl in selected_tables:
         tbl_info = TABLE_DICT[tbl]
         for col in tbl_info["numeric_cols"]:
             available_features.append(f"{tbl}:{col}")
 
-    # Always ensure BTC PRICE is included
+    # Always ensure BTC PRICE is in the list
     if "BTC PRICE:BTC_PRICE_USD" not in available_features:
         available_features.append("BTC PRICE:BTC_PRICE_USD")
 
@@ -265,37 +266,40 @@ with st.sidebar:
 
     st.markdown("---")
 
-    st.subheader("2. Define Non-negative Shifts (Days)")
+    st.subheader("2. Define Lag & Derivative for Each Feature")
     st.markdown(
-        "A shift of 1 aligns *yesterday’s data* to *today’s date*. "
-        "No negative shifts are allowed—i.e., we cannot use future data."
+        "For each feature, you can choose how many days to lag, and whether to apply a derivative. "
+        "Derivative = day-to-day change (first difference)."
     )
 
+    # A dictionary to store the shift and derivative settings
     shifts = {}
+    derivatives = {}
+
+    # A separate top-level checkbox specifically for BTC PRICE derivative
+    btc_derive_price = st.checkbox("Apply derivative to BTC PRICE?")
+
     for feat in selected_features:
-        # We do NOT allow shifting BTC PRICE
+        # If feature is the BTC PRICE
         if feat == "BTC PRICE:BTC_PRICE_USD":
-            shifts[feat] = 0 
+            # Force shift=0, derivative as set by top-level checkbox
+            st.markdown(f"**{feat}** –– (Lag=0 forced, derivative controlled by top-level checkbox above)")
+            shifts[feat] = 0
+            derivatives[feat] = btc_derive_price
+            st.markdown("---")
         else:
-            label = f"Lag (days) for {feat}"
-            shifts[feat] = st.slider(label, 0, 30, 0)
+            # This is a non-BTC feature, we allow a shift slider
+            shift_label = f"Lag (days) for {feat}"
+            shift_val = st.slider(shift_label, 0, 30, 0)
+            shifts[feat] = shift_val
 
-    st.markdown("---")
+            # Also a checkbox to decide derivative or not
+            derive_label = f"Take derivative of {feat}?"
+            derive_flag = st.checkbox(derive_label, value=False)
+            derivatives[feat] = derive_flag
 
-    st.subheader("3. Derivative (First Difference) Settings")
-    st.markdown(
-        "You can optionally convert any selected feature to its day-to-day change "
-        "(i.e. derivative). This helps correlate *rate of change* rather than absolute values."
-    )
-    enable_derivatives = st.checkbox("Apply derivative to selected features?")
-    derivative_targets = []
-    if enable_derivatives:
-        derivative_targets = st.multiselect(
-            "Which features do you want to derivate?",
-            selected_features,
-            default=[],
-            help="For example, pick 'BTC PRICE:BTC_PRICE_USD' if you want daily price changes."
-        )
+            st.markdown("---")
+
 
 
 ######################################
