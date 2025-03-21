@@ -200,7 +200,6 @@ TABLE_DICT = {
     },
 }
 
-
 ######################################
 # 5) Page Title
 ######################################
@@ -249,7 +248,7 @@ with st.sidebar:
 
     st.markdown("---")
 
-    # 2. Lag & Derivative Settings per Feature
+    # 2. Lag & Derivative Settings per Feature (for the merged data)
     st.subheader("Lag & Derivative Settings")
     shifts = {}
     derivatives = {}
@@ -272,7 +271,7 @@ with st.sidebar:
         derivatives[feat] = deriv_flag
         st.markdown("---")
         
-    # 3. Interactive Plot – Choose ONE additional indicator (from selected_features, excluding BTC PRICE)
+    # 3. Interactive Plot – Choose ONE additional indicator (excluding BTC PRICE)
     st.subheader("Interactive Plot Settings")
     inter_options = [f for f in selected_features if f != "BTC PRICE:BTC_PRICE_USD"]
     if inter_options:
@@ -291,11 +290,11 @@ with st.sidebar:
 
     st.markdown("---")
     
-    # 5. Plot Button (for multi-line correlation plot)
+    # 5. Plot Button (for multi-line plot of merged features)
     do_plot = st.button("Plot All Selected Features")
 
 ######################################
-# (B) Data Query & Transform for Correlation
+# (B) Data Query & Transform for Merged Data
 ######################################
 def load_feature(feature, start_date, end_date):
     """Load a single feature (table column) from Snowflake within the given date range."""
@@ -349,75 +348,6 @@ if merged_df is not None:
     merged_df.dropna(inplace=True)
 
 ######################################
-# (C) Correlation Matrix (on all selected features)
-######################################
-st.subheader("Correlation Matrix of Selected Features")
-if merged_df is None or merged_df.empty or len(merged_df.columns) < 2:
-    st.warning("Not enough data to compute correlation.")
-else:
-    df_corr = merged_df.drop(columns=["DATE"]).copy()
-    if corr_method == "pearson":
-        corr_matrix = df_corr.corr(method="pearson")
-    else:
-        corr_matrix = df_corr.corr(method="spearman")
-    
-    num_features = len(corr_matrix.columns)
-    fig_width = max(8, num_features * 0.8)
-    fig_height = max(6, num_features * 0.8)
-    fig_corr, ax_corr = plt.subplots(figsize=(fig_width, fig_height))
-    fig_corr.patch.set_facecolor("black")
-    ax_corr.set_facecolor("black")
-    sns.heatmap(
-        corr_matrix,
-        annot=True,
-        cmap="RdBu_r",
-        vmin=-1,
-        vmax=1,
-        square=True,
-        ax=ax_corr,
-        fmt=".2f",
-        cbar_kws={'shrink': 0.8, 'label': 'Correlation'}
-    )
-    ax_corr.set_title(f"{corr_method.capitalize()} Correlation Matrix", color="white")
-    plt.xticks(rotation=45, ha="right", color="white")
-    plt.yticks(rotation=0, color="white")
-    st.pyplot(fig_corr)
-
-######################################
-# Option to Save Plot on White Background
-######################################
-if st.button("Save Correlation Plot (White Background)"):
-    fig_save, ax_save = plt.subplots(figsize=(fig_width, fig_height))
-    fig_save.patch.set_facecolor("white")
-    ax_save.set_facecolor("white")
-    
-    sns.heatmap(
-        corr_matrix,
-        annot=True,
-        cmap="RdBu_r",
-        vmin=-1,
-        vmax=1,
-        square=True,
-        ax=ax_save,
-        fmt=".2f",
-        cbar_kws={'shrink': 0.75, 'label': 'Correlation'}
-    )
-    ax_save.set_title(f"{corr_method} Correlation Matrix of On-chain Features", color="black")
-    plt.xticks(rotation=45, ha="right", color="black")
-    plt.yticks(rotation=0, color="black")
-    
-    buf = io.BytesIO()
-    fig_save.savefig(buf, format="png", bbox_inches="tight", facecolor="white")
-    buf.seek(0)
-    st.download_button(
-        "Download Plot as PNG",
-        data=buf,
-        file_name=f"correlation_heatmap_{corr_method}.png",
-        mime="image/png"
-    )
-    plt.close(fig_save)
-
-######################################
 # (D) Interactive Plotly Chart (BTC Price vs. Interactive Indicator)
 ######################################
 st.subheader("Interactive Plot: BTC Price vs. Indicator")
@@ -426,7 +356,6 @@ if merged_df is None or merged_df.empty:
 elif interactive_indicator is None:
     st.info("Please select an indicator for the interactive plot.")
 else:
-    # Use merged_df for plotting
     btc_feat = "BTC PRICE:BTC_PRICE_USD"
     if btc_feat not in merged_df.columns:
         st.error("BTC PRICE data not found.")
@@ -482,9 +411,7 @@ else:
 ######################################
 st.subheader("Multi-line Chart of All Selected Features")
 if merged_df is not None and not merged_df.empty:
-    # Let user select features to include in the multi-line chart
     all_cols = list(merged_df.columns)
-    # Default: all selected features for correlation
     default_plot_feats = selected_features.copy()
     if "DATE" in default_plot_feats:
         default_plot_feats.remove("DATE")
@@ -517,17 +444,21 @@ if merged_df is not None and not merged_df.empty:
 else:
     st.warning("No merged data available for plotting.")
 
-
 ######################################
-# (F) Correlation Over Lags: Single Indicator vs. BTC Price
+# (F) Lag-based Correlation: Single Indicator vs. BTC Price
 ######################################
 st.subheader("Lag-based Correlation: Single Indicator vs. BTC Price")
 
-# -- Sidebar or main UI for picking one indicator & derivative settings
-st.markdown("Use the settings below to compute the correlation between **BTC Price** and **one chosen indicator** over a range of lag days.")
+st.markdown(
+    """
+    **Lag Explanation:**  
+    A **negative lag** (e.g., –1) means the indicator’s value from yesterday is compared with today’s BTC Price (the indicator leads the price).  
+    A **positive lag** would compare a future indicator with today’s BTC Price (the indicator lags behind).
+    """
+)
 
 with st.expander("Lag-Correlation Settings", expanded=True):
-    # 1. Pick the single indicator (any from TABLE_DICT, or reuse your `all_tables`)
+    # 1. Pick the single indicator (from TABLE_DICT)
     tables_for_lag = list(TABLE_DICT.keys())
     chosen_table_lag = st.selectbox("Select Table for the Indicator:", tables_for_lag, index=0)
     
@@ -544,52 +475,44 @@ with st.expander("Lag-Correlation Settings", expanded=True):
     st.write("Choose the range of lag days (negative to positive).")
     default_min_lag = -30
     default_max_lag = 30
-    min_lag = st.number_input("Minimum Lag (could be negative)", value=default_min_lag, step=1)
+    min_lag = st.number_input("Minimum Lag (can be negative)", value=default_min_lag, step=1)
     max_lag = st.number_input("Maximum Lag", value=default_max_lag, step=1)
     
-    # 5. Button to compute
+    # 5. Button to compute lag correlation
     do_lag_corr = st.button("Compute Lag Correlation")
 
 if do_lag_corr:
-    # Load BTC Price (raw, no shift)
     btc_feat_name = "BTC PRICE:BTC_PRICE_USD"
     df_btc = load_feature(btc_feat_name, query_start_date, query_end_date)
     df_btc.sort_values("DATE", inplace=True)
     df_btc.dropna(subset=[btc_feat_name], inplace=True)
     
-    # Load chosen indicator
     df_ind = load_feature(chosen_indicator_lag, query_start_date, query_end_date)
     df_ind.sort_values("DATE", inplace=True)
     df_ind.dropna(subset=[chosen_indicator_lag], inplace=True)
     
-    # Merge on DATE
     df_merge_lag = pd.merge(df_btc, df_ind, on="DATE", how="inner").dropna()
     
-    # Apply derivative if selected
     if btc_deriv_lag:
         df_merge_lag[btc_feat_name] = df_merge_lag[btc_feat_name].diff()
     if indicator_deriv_lag:
         df_merge_lag[chosen_indicator_lag] = df_merge_lag[chosen_indicator_lag].diff()
     df_merge_lag.dropna(inplace=True)
     
-    # If there's not enough data, skip
     if df_merge_lag.empty:
         st.warning("Not enough data to compute lag correlation.")
     else:
-        # We'll compute correlation for each integer lag in [min_lag, max_lag]
         lag_values = list(range(int(min_lag), int(max_lag) + 1))
         correlations = []
         
         for lag in lag_values:
             df_temp = df_merge_lag.copy()
             if lag != 0:
-                # Invert the lag value: negative slider means indicator from the past
+                # Invert the lag value so that a negative lag means using past indicator values
                 df_temp[chosen_indicator_lag] = df_temp[chosen_indicator_lag].shift(-lag)
             
-            # Drop rows with NaNs introduced by the shift
             df_temp.dropna(inplace=True)
             
-            # If there's enough data left, calculate correlation
             if len(df_temp) > 1:
                 if corr_method == "pearson":
                     corr_val = df_temp[[btc_feat_name, chosen_indicator_lag]].corr(method="pearson").iloc[0,1]
@@ -599,15 +522,12 @@ if do_lag_corr:
                 corr_val = np.nan
             
             correlations.append(corr_val)
-
         
-        # Build a dataframe for plotting
         df_lag_corr = pd.DataFrame({
             "Lag": lag_values,
             "Correlation": correlations
         })
         
-        # Plotly line chart
         fig_lag = go.Figure()
         fig_lag.add_trace(go.Scatter(
             x=df_lag_corr["Lag"],
@@ -629,7 +549,6 @@ if do_lag_corr:
         
         st.plotly_chart(fig_lag, use_container_width=True)
         
-        # Optional: show the best lag (max correlation in absolute value, or max positive?)
         max_corr_idx = np.nanargmax(np.abs(df_lag_corr["Correlation"]))
         best_lag = df_lag_corr["Lag"][max_corr_idx]
         best_corr = df_lag_corr["Correlation"][max_corr_idx]
