@@ -15,12 +15,11 @@ import matplotlib.pyplot as plt
 # 1) Page Configuration & Dark Theme
 ######################################
 st.set_page_config(
-    page_title="BTC Price & Indicator - Correlation & Plot",
+    page_title="BTC Price & Indicator – Correlation & Plot",
     layout="wide",
     initial_sidebar_state="expanded"
 )
 
-# Dark theme overrides
 st.markdown(
     """
     <style>
@@ -44,17 +43,21 @@ cx = st.connection("snowflake")
 session = cx.session()
 
 ######################################
-# 3) Basic Color Palette & Helpers
+# 3) Define Color Palette & Session State
 ######################################
 COLOR_PALETTE = [
-    "#E74C3C", "#F1C40F", "#2ECC71", "#3498DB", 
-    "#9B59B6", "#1ABC9C", "#E67E22", "#FF00FF", 
+    "#E74C3C", "#F1C40F", "#2ECC71", "#3498DB",
+    "#9B59B6", "#1ABC9C", "#E67E22", "#FF00FF",
     "#FF1493", "#FFD700"
 ]
-random.shuffle(COLOR_PALETTE)
+if "color_palette" not in st.session_state:
+    st.session_state["color_palette"] = COLOR_PALETTE.copy()
+    random.shuffle(st.session_state["color_palette"])
+if "plot_lines" not in st.session_state:
+    st.session_state["plot_lines"] = {}  # will hold final series for plotting
 
 ######################################
-# 4) Table Dictionary for BTC PRICE + Others
+# 4) Table / Feature Mappings
 ######################################
 TABLE_DICT = {
     "ACTIVE ADDRESSES": {
@@ -197,70 +200,107 @@ TABLE_DICT = {
     },
 }
 
-######################################
-# 5) Title
-######################################
-st.title("BTC Price vs. Single Indicator – Lag/Derivative, Correlation & Plot")
 
 ######################################
-# 6) Sidebar - Query & Transform Settings
+# 5) Page Title
 ######################################
-st.sidebar.header("Configuration")
-
-# A) Date Range
-st.sidebar.subheader("Date Range")
-default_start = datetime.date(2015, 1, 1)
-start_date = st.sidebar.date_input("Start Date", value=default_start)
-enable_end = st.sidebar.checkbox("Enable End Date", value=False)
-if enable_end:
-    default_end = datetime.date.today()
-    end_date = st.sidebar.date_input("End Date", value=default_end)
-else:
-    end_date = None
-
-# B) Correlation Method
-corr_method = st.sidebar.selectbox("Correlation Method", ["pearson", "spearman"], index=0)
-
-st.sidebar.markdown("---")
-
-# C) BTC Price derivative
-st.sidebar.subheader("BTC Price Settings")
-derive_btc = st.sidebar.checkbox("Take derivative of BTC Price?", value=False)
-
-# BTC Price always shift=0
-shift_btc = 0
-
-st.sidebar.markdown("---")
-
-# D) Choose 1 other indicator
-st.sidebar.subheader("Indicator Settings")
-all_other_tables = [k for k in TABLE_DICT.keys() if k != "BTC PRICE"]
-all_feats = []
-for t in all_other_tables:
-    for c in TABLE_DICT[t]["numeric_cols"]:
-        all_feats.append(f"{t}:{c}")
-
-indicator_choice = st.sidebar.selectbox(
-    "Select One Indicator", 
-    options=all_feats,
-    help="Pick exactly one other feature to compare against BTC Price."
-)
-
-shift_indicator = st.sidebar.slider("Lag (days) for indicator", 0, 30, 0)
-derive_indicator = st.sidebar.checkbox("Take derivative of indicator?", value=False)
-
-st.sidebar.markdown("---")
-
+st.title("BTC Price vs. Indicator – Lag/Derivative, Correlation & Plot")
 
 ######################################
-# 7) Data Retrieval & Transform
+# (A) Sidebar – Global & Feature Settings
 ######################################
-def load_data_from_snowflake(feature_name, start_date, end_date):
-    """Query a single feature from Snowflake, given start/end date constraints."""
-    tbl, col = feature_name.split(":", 1)
+with st.sidebar:
+    st.header("Configuration")
+
+    # Date range for querying & plotting
+    st.subheader("Date Range")
+    default_start = datetime.date(2015, 1, 1)
+    query_start_date = st.date_input("Query Start Date", value=default_start, key="query_start")
+    enable_query_end = st.checkbox("Set Query End Date", value=False, key="query_end_checkbox")
+    if enable_query_end:
+        query_end_date = st.date_input("Query End Date", value=datetime.date.today(), key="query_end")
+    else:
+        query_end_date = None
+
+    st.markdown("---")
+
+    # Correlation method
+    corr_method = st.selectbox("Correlation Method", ["pearson", "spearman"], index=0)
+
+    st.markdown("---")
+
+    # 1. Choose Indicators for Correlation
+    st.subheader("Choose Features for Correlation")
+    all_tables = list(TABLE_DICT.keys())
+    default_tables = ["BTC PRICE", "ACTIVE ADDRESSES", "CDD"]  # adjust as needed
+    selected_tables = st.multiselect("Select tables to include:", all_tables, default=default_tables)
+    
+    available_features = []
+    for tbl in selected_tables:
+        for col in TABLE_DICT[tbl]["numeric_cols"]:
+            feat_name = f"{tbl}:{col}"
+            available_features.append(feat_name)
+    if "BTC PRICE:BTC_PRICE_USD" not in available_features:
+        available_features.append("BTC PRICE:BTC_PRICE_USD")
+    
+    # Multi-select: for correlation, you can pick any number
+    selected_features = st.multiselect("Select features for correlation:", available_features, default=available_features)
+
+    st.markdown("---")
+
+    # 2. Lag & Derivative Settings per Feature
+    st.subheader("Lag & Derivative Settings")
+    shifts = {}
+    derivatives = {}
+    
+    # For BTC PRICE, always no lag; derivative optional.
+    st.write("**BTC PRICE:BTC_PRICE_USD** (no lag)")
+    btc_deriv = st.checkbox("Take derivative of BTC Price?", key="btc_deriv", value=False)
+    shifts["BTC PRICE:BTC_PRICE_USD"] = 0
+    derivatives["BTC PRICE:BTC_PRICE_USD"] = btc_deriv
+    st.markdown("---")
+    
+    # For all other selected features:
+    for feat in selected_features:
+        if feat == "BTC PRICE:BTC_PRICE_USD":
+            continue
+        st.write(f"**{feat}**")
+        shift_val = st.slider(f"Lag (days) for {feat}", 0, 30, 0, key=f"shift_{feat}")
+        shifts[feat] = shift_val
+        deriv_flag = st.checkbox(f"Take derivative of {feat}?", key=f"deriv_{feat}", value=False)
+        derivatives[feat] = deriv_flag
+        st.markdown("---")
+        
+    # 3. Interactive Plot – Choose ONE additional indicator (from selected_features, excluding BTC PRICE)
+    st.subheader("Interactive Plot Settings")
+    # Build list for interactive indicator choices (exclude BTC PRICE)
+    inter_options = [f for f in selected_features if f != "BTC PRICE:BTC_PRICE_USD"]
+    if inter_options:
+        interactive_indicator = st.selectbox("Select Indicator for Interactive Plot (with BTC Price):", options=inter_options, index=0)
+    else:
+        interactive_indicator = None
+        
+    # 4. Plotting Date Range (for final plots)
+    st.subheader("Plotting Date Range")
+    plot_start_date = st.date_input("Plot Start Date", value=default_start, key="plot_start")
+    enable_plot_end = st.checkbox("Set Plot End Date", value=False, key="plot_end_checkbox")
+    if enable_plot_end:
+        plot_end_date = st.date_input("Plot End Date", value=datetime.date.today(), key="plot_end")
+    else:
+        plot_end_date = None
+
+    st.markdown("---")
+    
+    # 5. Plot Button (for multi-line correlation plot)
+    do_plot = st.button("Plot All Selected Features")
+
+######################################
+# (B) Data Query & Transform for Correlation
+######################################
+def load_feature(feature, start_date, end_date):
+    tbl, col = feature.split(":", 1)
     info = TABLE_DICT[tbl]
     date_col = info["date_col"]
-    
     query = f"""
         SELECT
             CAST({date_col} AS DATE) AS DATE,
@@ -271,155 +311,169 @@ def load_data_from_snowflake(feature_name, start_date, end_date):
     if end_date:
         query += f" AND CAST({date_col} AS DATE) <= '{end_date}'"
     query += " ORDER BY DATE"
-    
     df = session.sql(query).to_pandas()
-    df.rename(columns={col: feature_name}, inplace=True)
+    df.rename(columns={col: feature}, inplace=True)
     df.sort_values("DATE", inplace=True)
-    df.dropna(subset=[feature_name], how="any", inplace=True)
+    df.dropna(subset=[feature], inplace=True)
     return df.reset_index(drop=True)
 
-# 1) BTC Price
-btc_feat_name = "BTC PRICE:BTC_PRICE_USD"
-df_btc = load_data_from_snowflake(btc_feat_name, start_date, end_date)
+# Query and transform each selected feature
+dfs = {}
+for feat in selected_features:
+    df_feat = load_feature(feat, query_start_date, query_end_date)
+    # Apply derivative if selected
+    if derivatives.get(feat, False):
+        df_feat[feat] = df_feat[feat].diff()
+        df_feat.dropna(subset=[feat], inplace=True)
+    # Apply shift if needed
+    shift_val = shifts.get(feat, 0)
+    if shift_val > 0:
+        df_feat[feat] = df_feat[feat].shift(shift_val)
+        df_feat.dropna(subset=[feat], inplace=True)
+    dfs[feat] = df_feat
 
-# Derivative?
-if derive_btc:
-    df_btc[btc_feat_name] = df_btc[btc_feat_name].diff()
-    df_btc.dropna(subset=[btc_feat_name], how="any", inplace=True)
-
-# Shift=0 => do nothing for BTC
-
-# 2) Indicator
-df_ind = load_data_from_snowflake(indicator_choice, start_date, end_date)
-
-# Derivative
-if derive_indicator:
-    df_ind[indicator_choice] = df_ind[indicator_choice].diff()
-    df_ind.dropna(subset=[indicator_choice], how="any", inplace=True)
-
-# Shift for indicator
-if shift_indicator > 0:
-    df_ind[indicator_choice] = df_ind[indicator_choice].shift(shift_indicator)
-    df_ind.dropna(subset=[indicator_choice], how="any", inplace=True)
-
-# Merge them
-df_merged = pd.merge(df_btc, df_ind, on="DATE", how="inner")
-df_merged.sort_values("DATE", inplace=True)
-df_merged.dropna(how="any", inplace=True)
-
-######################################
-# 8) Correlation (2x2)
-######################################
-st.subheader("Correlation Matrix")
-
-if len(df_merged) < 2:
-    st.warning("Not enough data points after transformations.")
-else:
-    subset_for_corr = df_merged.drop(columns=["DATE"]).copy()
-    if len(subset_for_corr.columns) >= 2:
-        if corr_method == "pearson":
-            cmat = subset_for_corr.corr(method="pearson")
-        else:
-            cmat = subset_for_corr.corr(method="spearman")
-
-        # We'll do a quick seaborn heatmap
-        fig_corr, ax_corr = plt.subplots(figsize=(4,4))  # 2x2 or so
-        fig_corr.patch.set_facecolor("black")
-        ax_corr.set_facecolor("black")
-
-        sns.heatmap(
-            cmat,
-            annot=True,
-            cmap="RdBu_r",
-            vmin=-1,
-            vmax=1,
-            square=True,
-            ax=ax_corr,
-            fmt=".2f",
-            cbar_kws={'shrink': 0.8, 'label': 'Correlation'}
-        )
-        ax_corr.set_title("Correlation of BTC vs. Indicator", color="white")
-        plt.xticks(color="white", rotation=45, ha="right")
-        plt.yticks(color="white", rotation=0)
-        st.pyplot(fig_corr)
-
-        st.write(cmat)
+# Merge all features on DATE (using inner join)
+merged_df = None
+for feat, df_feat in dfs.items():
+    if merged_df is None:
+        merged_df = df_feat.copy()
     else:
-        st.warning("Need at least 2 columns for correlation.")
+        merged_df = pd.merge(merged_df, df_feat, on="DATE", how="inner")
+if merged_df is not None:
+    merged_df.sort_values("DATE", inplace=True)
+    merged_df.dropna(inplace=True)
 
 ######################################
-# 9) Plotly Chart with 2 y-axes
+# (C) Correlation Matrix (on all selected features)
 ######################################
-st.subheader("Price & Indicator – Plotly Chart")
-
-if df_merged.empty:
-    st.warning("No data to plot.")
+st.subheader("Correlation Matrix of Selected Features")
+if merged_df is None or merged_df.empty or len(merged_df.columns) < 2:
+    st.warning("Not enough data to compute correlation.")
 else:
-    # We'll put BTC Price on the left y-axis, the indicator on the right y-axis
-    btc_vals = df_merged[btc_feat_name]
-    ind_vals = df_merged[indicator_choice]
-    dates = df_merged["DATE"]
-
-    fig = go.Figure()
-
-    # 1) BTC Price on yaxis="y"
-    fig.add_trace(go.Scatter(
-        x=dates,
-        y=btc_vals,
-        mode='lines',
-        name=btc_feat_name,
-        line=dict(color=COLOR_PALETTE[0]),
-        yaxis="y1"
-    ))
-
-    # 2) Indicator on yaxis="y2"
-    fig.add_trace(go.Scatter(
-        x=dates,
-        y=ind_vals,
-        mode='lines',
-        name=indicator_choice,
-        line=dict(color=COLOR_PALETTE[1]),
-        yaxis="y2"
-    ))
-
-    fig.update_layout(
-        xaxis=dict(
-            domain=[0.1, 0.9],  # a bit of spacing
-        ),
-        yaxis=dict(
-            title=btc_feat_name,
-            titlefont=dict(color=COLOR_PALETTE[0]),
-            tickfont=dict(color=COLOR_PALETTE[0]),
-            anchor="x",
-            side="left"
-        ),
-        yaxis2=dict(
-            title=indicator_choice,
-            titlefont=dict(color=COLOR_PALETTE[1]),
-            tickfont=dict(color=COLOR_PALETTE[1]),
-            anchor="x",
-            overlaying="y",
-            side="right"
-        ),
-        margin=dict(l=50, r=50, t=50, b=50),
-        paper_bgcolor="black",
-        plot_bgcolor="black",
-        legend=dict(
-            x=0.01, y=0.99, bgcolor="rgba(0,0,0,0)"
-        ),
-        hovermode="x unified",
-        title="BTC Price (Left Axis) vs. Indicator (Right Axis)"
+    df_corr = merged_df.drop(columns=["DATE"]).copy()
+    if corr_method == "pearson":
+        corr_matrix = df_corr.corr(method="pearson")
+    else:
+        corr_matrix = df_corr.corr(method="spearman")
+    
+    num_features = len(corr_matrix.columns)
+    fig_width = max(8, num_features * 0.8)
+    fig_height = max(6, num_features * 0.8)
+    fig_corr, ax_corr = plt.subplots(figsize=(fig_width, fig_height))
+    fig_corr.patch.set_facecolor("black")
+    ax_corr.set_facecolor("black")
+    sns.heatmap(
+        corr_matrix,
+        annot=True,
+        cmap="RdBu_r",
+        vmin=-1,
+        vmax=1,
+        square=True,
+        ax=ax_corr,
+        fmt=".2f",
+        cbar_kws={'shrink': 0.8, 'label': 'Correlation'}
     )
+    ax_corr.set_title(f"{corr_method.capitalize()} Correlation Matrix", color="white")
+    plt.xticks(rotation=45, ha="right", color="white")
+    plt.yticks(rotation=0, color="white")
+    st.pyplot(fig_corr)
 
-    # X-axis in white
-    fig.update_xaxes(
-        showgrid=True, gridcolor="grey", 
-        zeroline=False, linecolor="white", 
-        tickfont=dict(color="white"), 
-        titlefont=dict(color="white")
-    )
-    fig.update_yaxes(
-        showgrid=True, gridcolor="grey"
-    )
+######################################
+# (D) Interactive Plotly Chart (BTC Price vs. Interactive Indicator)
+######################################
+st.subheader("Interactive Plot: BTC Price vs. Indicator")
+if merged_df is None or merged_df.empty:
+    st.warning("No data to plot.")
+elif interactive_indicator is None:
+    st.info("Please select an indicator for the interactive plot.")
+else:
+    # Use merged_df for plotting
+    # Ensure BTC PRICE is present
+    btc_feat = "BTC PRICE:BTC_PRICE_USD"
+    if btc_feat not in merged_df.columns:
+        st.error("BTC PRICE data not found.")
+    else:
+        fig = go.Figure()
+        fig.add_trace(go.Scatter(
+            x=merged_df["DATE"],
+            y=merged_df[btc_feat],
+            mode="lines",
+            name=btc_feat,
+            line=dict(color=COLOR_PALETTE[0]),
+            yaxis="y1"
+        ))
+        fig.add_trace(go.Scatter(
+            x=merged_df["DATE"],
+            y=merged_df[interactive_indicator],
+            mode="lines",
+            name=interactive_indicator,
+            line=dict(color=COLOR_PALETTE[1]),
+            yaxis="y2"
+        ))
+        fig.update_layout(
+            xaxis=dict(domain=[0.1, 0.9]),
+            yaxis=dict(
+                title=dict(text=btc_feat, font=dict(color=COLOR_PALETTE[0])),
+                tickfont=dict(color=COLOR_PALETTE[0]),
+                anchor="x",
+                side="left"
+            ),
+            yaxis2=dict(
+                title=dict(text=interactive_indicator, font=dict(color=COLOR_PALETTE[1])),
+                tickfont=dict(color=COLOR_PALETTE[1]),
+                anchor="x",
+                overlaying="y",
+                side="right"
+            ),
+            margin=dict(l=50, r=50, t=50, b=50),
+            paper_bgcolor="black",
+            plot_bgcolor="black",
+            legend=dict(x=0.01, y=0.99, bgcolor="rgba(0,0,0,0)"),
+            hovermode="x unified",
+            title="BTC Price (Left Axis) vs. Indicator (Right Axis)"
+        )
+        fig.update_xaxes(
+            showgrid=True, gridcolor="grey", zeroline=False, linecolor="white", 
+            tickfont=dict(color="white"), titlefont=dict(color="white")
+        )
+        fig.update_yaxes(showgrid=True, gridcolor="grey")
+        st.plotly_chart(fig, use_container_width=True)
 
-    st.plotly_chart(fig, use_container_width=True)
+######################################
+# (E) Multi-line Chart of All Selected Features (Optional)
+######################################
+st.subheader("Multi-line Chart of All Selected Features")
+if merged_df is not None and not merged_df.empty:
+    # Let user select features to include in the multi-line chart
+    all_cols = list(merged_df.columns)
+    # Default: all selected features for correlation
+    default_plot_feats = selected_features.copy()
+    if "DATE" in default_plot_feats:
+        default_plot_feats.remove("DATE")
+    features_to_plot = st.multiselect("Select features to plot:", options=all_cols, default=default_plot_feats)
+    if features_to_plot:
+        fig_multi = go.Figure()
+        color_iter = iter(st.session_state["color_palette"])
+        for feat in features_to_plot:
+            if feat == "DATE":
+                continue
+            fig_multi.add_trace(go.Scatter(
+                x=merged_df["DATE"],
+                y=merged_df[feat],
+                mode="lines",
+                name=feat,
+                line=dict(color=next(color_iter, "tab:blue"))
+            ))
+        fig_multi.update_layout(
+            title="Multi-line Plot of Selected Features",
+            xaxis_title="Date",
+            yaxis_title="Value",
+            paper_bgcolor="white",
+            plot_bgcolor="white",
+            legend=dict(x=0.01, y=0.99)
+        )
+        st.plotly_chart(fig_multi, use_container_width=True)
+    else:
+        st.info("Please select at least one feature for the multi-line chart.")
+else:
+    st.warning("No merged data available for plotting.")
