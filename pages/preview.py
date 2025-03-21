@@ -62,7 +62,7 @@ if "color_palette" not in st.session_state:
 ######################################
 # 5) Page Title
 ######################################
-st.title("Correlation Matrix of On-chain Features")
+st.title("Correlation Matrix of On-chain Features (Option to Use Derivatives)")
 
 ######################################
 # (A) Table Configurations
@@ -252,6 +252,7 @@ with st.sidebar:
         for col in tbl_info["numeric_cols"]:
             available_features.append(f"{tbl}:{col}")
 
+    # Always ensure BTC PRICE is included
     if "BTC PRICE:BTC_PRICE_USD" not in available_features:
         available_features.append("BTC PRICE:BTC_PRICE_USD")
 
@@ -280,6 +281,22 @@ with st.sidebar:
             shifts[feat] = st.slider(label, 0, 30, 0)
 
     st.markdown("---")
+
+    st.subheader("3. Derivative (First Difference) Settings")
+    st.markdown(
+        "You can optionally convert any selected feature to its day-to-day change "
+        "(i.e. derivative). This helps correlate *rate of change* rather than absolute values."
+    )
+    enable_derivatives = st.checkbox("Apply derivative to selected features?")
+    derivative_targets = []
+    if enable_derivatives:
+        derivative_targets = st.multiselect(
+            "Which features do you want to derivate?",
+            selected_features,
+            default=[],
+            help="For example, pick 'BTC PRICE:BTC_PRICE_USD' if you want daily price changes."
+        )
+
 
 ######################################
 # (C) Data Query & Merge for Correlation
@@ -320,6 +337,14 @@ for df_other in df_list[1:]:
 merged_df.sort_values("DATE", inplace=True)
 merged_df = merged_df.dropna(how="all")
 
+# Optionally apply derivatives first
+if enable_derivatives and derivative_targets:
+    for feat in derivative_targets:
+        if feat in merged_df.columns:
+            merged_df[feat] = merged_df[feat].diff()
+    # Drop the first row which has NaN due to diff()
+    merged_df.dropna(subset=derivative_targets, how="any", inplace=True)
+
 # Apply the user-defined shifts
 for feat, shift_val in shifts.items():
     if feat in merged_df.columns and shift_val > 0:
@@ -331,9 +356,13 @@ merged_df.dropna(how="any", inplace=True)
 ######################################
 # (D) Compute Correlation
 ######################################
-st.subheader(f"{corr_method} Correlation Matrix (Lagged Indicators)")
+st.subheader(f"{corr_method.capitalize()} Correlation Matrix (Lagged/Derived Indicators)")
 
 df_for_corr = merged_df.drop(columns=["DATE"]).copy()
+
+if len(df_for_corr.columns) < 2:
+    st.warning("Not enough columns to compute correlation. Please select at least 2 features.")
+    st.stop()
 
 if corr_method == "pearson":
     corr_matrix = df_for_corr.corr(method="pearson")
@@ -360,7 +389,7 @@ sns.heatmap(
     fmt=".2f",
     cbar_kws={'shrink': 0.75, 'label': 'Correlation'}
 )
-ax.set_title(f"{corr_method} Correlation Matrix of On-chain Features (Non-negative Lags)", color="white")
+ax.set_title(f"{corr_method.capitalize()} Correlation Matrix of On-chain Features", color="white")
 plt.xticks(rotation=45, ha="right", color="white")
 plt.yticks(rotation=0, color="white")
 
@@ -385,7 +414,7 @@ if st.button("Save Correlation Plot (White Background)"):
         fmt=".2f",
         cbar_kws={'shrink': 0.75, 'label': 'Correlation'}
     )
-    ax_save.set_title(f"{corr_method} Correlation Matrix (Non-negative Lags)", color="black")
+    ax_save.set_title(f"{corr_method.capitalize()} Correlation Matrix (Non-negative Lags)", color="black")
     plt.xticks(rotation=45, ha="right", color="black")
     plt.yticks(rotation=0, color="black")
 
@@ -408,6 +437,10 @@ st.subheader("Feature Selection for BTC Price Prediction")
 target_col = "BTC PRICE:BTC_PRICE_USD"
 
 max_feats = len(df_for_corr.columns) - 1 if target_col in df_for_corr.columns else len(df_for_corr.columns)
+if max_feats < 1:
+    st.warning("Cannot do feature selection because there's no target or not enough columns.")
+    st.stop()
+
 num_features_to_select = st.slider(
     "Number of top features to select",
     min_value=1,
@@ -421,7 +454,7 @@ selection_method = st.selectbox(
 )
 
 st.markdown("""
-In **Correlation-based** selection, we pick the top features by absolute correlation to BTC Price.
+In **Correlation-based** selection, we pick the top features by absolute correlation to BTC Price (or its derivative, if chosen).
 In **RandomForest-based** selection, we train a light Random Forest to predict BTC Price from all
 other features, and rank features by their importance scores.
 """)
@@ -447,6 +480,10 @@ if st.button("Run Feature Selection"):
             if len(X) < 10:
                 st.warning("Not enough data rows to run Random Forest-based feature selection.")
             else:
+                from sklearn.ensemble import RandomForestRegressor
+                from sklearn.model_selection import train_test_split
+                from sklearn.metrics import mean_squared_error
+
                 X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, shuffle=False)
                 rf_model = RandomForestRegressor(
                     n_estimators=2000,
@@ -464,12 +501,10 @@ if st.button("Run Feature Selection"):
                 for (feat, imp) in feat_imp_pairs[:num_features_to_select]:
                     st.write(f"{feat}: importance = {imp:.4f}")
 
-
-                # Optional: Evaluate quickly
+                # Evaluate quickly
                 y_pred = rf_model.predict(X_test)
                 mse = mean_squared_error(y_test, y_pred)
                 rmse = math.sqrt(mse)
-                print("RMSE:", rmse)
                 st.write(f"Random Forest test RMSE: {rmse:.2f}")
 
         st.write("---")
