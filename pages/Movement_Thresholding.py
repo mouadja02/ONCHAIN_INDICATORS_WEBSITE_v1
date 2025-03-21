@@ -89,11 +89,12 @@ WHERE PREV_AVG IS NOT NULL AND DATE > '{hist_start_date_str}'
 """
 df_movement = session.sql(query_movement).to_pandas()
 
-# 4.2) Check normality (Shapiro-Wilk Test)
 movement_data = df_movement["PRICE_MOVEMENT_PERCENT"].dropna()
+
+# 4.2) Check normality (Shapiro-Wilk Test) on the ENTIRE dataset
 stat, p_value = shapiro(movement_data)
 
-# 4.3) Mean and standard deviation
+# 4.3) Mean and std on the entire dataset
 mean_val = movement_data.mean()
 std_val = movement_data.std()
 
@@ -104,8 +105,10 @@ df_movement["Movement_Category"] = df_movement["PRICE_MOVEMENT_PERCENT"].apply(
                ("Slight Increase" if x > 0 else "Slight Decrease"))
 )
 
+######################################
 # 4.4) Display normality test results
-st.subheader("BTC Price Movement Percentage - Normality Check")
+######################################
+st.subheader("BTC Price Movement Percentage - Normality Check (Full Data)")
 st.write(f"Shapiro-Wilk Test Statistic = {stat:.4f}, p-value = {p_value:.4f}")
 
 if p_value < 0.05:
@@ -113,24 +116,81 @@ if p_value < 0.05:
 else:
     st.write("**Conclusion**: The distribution *is* likely normal (p >= 0.05).")
 
-st.write(f"Mean Movement: {mean_val:.2f}%")
-st.write(f"Std Dev of Movement: {std_val:.2f}%")
+st.write(f"Mean Movement (full data): {mean_val:.2f}%")
+st.write(f"Std Dev of Movement (full data): {std_val:.2f}%")
 st.write(f"Threshold for 'Significant' set at ±{std_slider} standard deviations.")
 
-# 4.5) Plot histogram of movements using the nbins_slider value
+######################################
+# 4.5) Plot histogram (full data)
+######################################
 fig_hist = go.Figure()
 fig_hist.add_trace(go.Histogram(x=movement_data, nbinsx=nbins_slider))
 fig_hist.update_layout(
-    title="Distribution of BTC Movement (%)",
+    title="Distribution of BTC Movement (%) - Full Data",
     xaxis_title="BTC Movement (%)",
     yaxis_title="Count",
     template="plotly_dark"
 )
-
 st.plotly_chart(fig_hist, use_container_width=True)
 
-# 4.6) Display table of movements with categories
-st.subheader("BTC Price Movements With Classification")
+######################################
+# 4.6) Subset Range + Normality Check
+######################################
+st.subheader("Subset Range Analysis")
+
+st.write("Select a movement percentage range (in %). We'll slice the data to that range, run a normality test, and if it's normal, define a threshold for up/down/unchanged.")
+
+range_min, range_max = st.slider(
+    "Select Movement Range (%)",
+    min_value=float(movement_data.min()),
+    max_value=float(movement_data.max()),
+    value=(float(movement_data.min()), float(movement_data.max())),
+    step=0.5
+)
+
+# Subset
+subset_data = movement_data[(movement_data >= range_min) & (movement_data <= range_max)]
+st.write(f"Data points in selected range: {len(subset_data)}")
+
+if len(subset_data) > 1:
+    # Normality test on subset
+    stat_sub, p_sub = shapiro(subset_data)
+    mean_sub = subset_data.mean()
+    std_sub = subset_data.std()
+
+    st.write(f"**Subset Shapiro-Wilk**: statistic={stat_sub:.4f}, p={p_sub:.4f}")
+    st.write(f"Subset mean={mean_sub:.2f}% , std={std_sub:.2f}%")
+
+    if p_sub < 0.05:
+        st.write("**Subset Conclusion**: likely *not* normal (p < 0.05).")
+    else:
+        st.write("**Subset Conclusion**: likely normal (p >= 0.05).")
+
+        # If normal, let's define a threshold
+        st.write("**Defining Up/Down/Unchanged** around mean ± 1×std (example).")
+        up_threshold = mean_sub + std_sub
+        down_threshold = mean_sub - std_sub
+        st.write(f"Up if movement >= {up_threshold:.2f}%")
+        st.write(f"Down if movement <= {down_threshold:.2f}%")
+        st.write("Unchanged otherwise")
+
+        # Show a mini table with these boundaries
+        st.write("**Boundaries**:")
+        st.table({
+            "Type": ["Down", "Unchanged", "Up"],
+            "Condition": [
+                f"movement ≤ {down_threshold:.2f}%",
+                f"{down_threshold:.2f}% < movement < {up_threshold:.2f}%",
+                f"movement ≥ {up_threshold:.2f}%"
+            ]
+        })
+else:
+    st.write("Not enough data points in this range to do a normality test.")
+
+######################################
+# 4.7) Display table of movements with categories (FULL data)
+######################################
+st.subheader("BTC Price Movements With Classification (Full Data)")
 st.dataframe(df_movement[["DATE", "AVG_PRICE", "PREV_AVG", "PRICE_MOVEMENT_PERCENT", "Movement_Category"]])
 
 ######################################
