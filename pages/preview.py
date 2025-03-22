@@ -349,73 +349,131 @@ if merged_df is not None:
     merged_df.dropna(inplace=True)
 
 ######################################
-# (C) Correlation Matrix (on all selected features)
+# (C) Correlation Matrix (on all selected features with applied lags)
 ######################################
-st.subheader("Correlation Matrix of Selected Features")
+st.subheader("Correlation Matrix of Selected Features (with applied lags)")
 if merged_df is None or merged_df.empty or len(merged_df.columns) < 2:
     st.warning("Not enough data to compute correlation.")
 else:
-    df_corr = merged_df.drop(columns=["DATE"]).copy()
-    if corr_method == "pearson":
-        corr_matrix = df_corr.corr(method="pearson")
+    # We need to apply lags properly for each feature in the correlation matrix
+    # instead of just using the already merged dataframe
+    
+    # 1. Start with raw data for each feature (without derivatives or shifts yet)
+    raw_dfs = {}
+    for feat in selected_features:
+        raw_dfs[feat] = load_feature(feat, query_start_date, query_end_date)
+    
+    # 2. Create a base date range (intersection of all feature date ranges)
+    date_dfs = [df[["DATE"]] for df in raw_dfs.values()]
+    base_dates = date_dfs[0].copy()
+    for df in date_dfs[1:]:
+        base_dates = pd.merge(base_dates, df, on="DATE", how="inner")
+    base_dates.sort_values("DATE", inplace=True)
+    
+    # 3. For each feature, apply its derivative and lag properly
+    lag_adjusted_dfs = {}
+    for feat in selected_features:
+        # Start with raw data and filter to base date range
+        df_feat = pd.merge(base_dates, raw_dfs[feat], on="DATE", how="left")
+        
+        # Apply derivative if selected
+        if derivatives.get(feat, False):
+            df_feat[feat] = df_feat[feat].diff()
+            
+        # Apply shift if needed (correctly applying lag)
+        shift_val = shifts.get(feat, 0)
+        if shift_val != 0:
+            # Note: positive shift means indicator from the past affecting current price
+            # negative shift means current indicator affecting future price
+            df_feat[feat] = df_feat[feat].shift(shift_val)
+        
+        lag_adjusted_dfs[feat] = df_feat
+    
+    # 4. Merge all lag-adjusted features
+    lag_adjusted_df = base_dates.copy()
+    for feat, df_feat in lag_adjusted_dfs.items():
+        lag_adjusted_df = pd.merge(lag_adjusted_df, df_feat[["DATE", feat]], on="DATE", how="left")
+    
+    # 5. Drop rows with NaN values (introduced by derivative and lag operations)
+    lag_adjusted_df.dropna(inplace=True)
+    
+    # 6. Compute correlation matrix
+    if not lag_adjusted_df.empty and len(lag_adjusted_df) > 1:
+        df_corr = lag_adjusted_df.drop(columns=["DATE"]).copy()
+        if corr_method == "pearson":
+            corr_matrix = df_corr.corr(method="pearson")
+        else:
+            corr_matrix = df_corr.corr(method="spearman")
+        
+        # Add lag information to feature names in correlation matrix
+        new_index = []
+        for feat in corr_matrix.index:
+            lag_val = shifts.get(feat, 0)
+            deriv = "Δ" if derivatives.get(feat, False) else ""
+            if lag_val != 0:
+                new_index.append(f"{deriv}{feat} (lag:{lag_val})")
+            else:
+                new_index.append(f"{deriv}{feat}")
+        
+        corr_matrix.index = new_index
+        corr_matrix.columns = new_index
+        
+        # 7. Display correlation matrix
+        num_features = len(corr_matrix.columns)
+        fig_width = max(8, num_features * 0.8)
+        fig_height = max(6, num_features * 0.8)
+        fig_corr, ax_corr = plt.subplots(figsize=(fig_width, fig_height))
+        fig_corr.patch.set_facecolor("black")
+        ax_corr.set_facecolor("black")
+        sns.heatmap(
+            corr_matrix,
+            annot=True,
+            cmap="RdBu_r",
+            vmin=-1,
+            vmax=1,
+            square=True,
+            ax=ax_corr,
+            fmt=".2f",
+            cbar_kws={'shrink': 0.8, 'label': 'Correlation'}
+        )
+        ax_corr.set_title(f"{corr_method.capitalize()} Correlation Matrix with Applied Lags", color="white")
+        plt.xticks(rotation=45, ha="right", color="white")
+        plt.yticks(rotation=0, color="white")
+        st.pyplot(fig_corr)
+        
+        # 8. Option to save the correlation matrix with white background
+        if st.button("Save Correlation Plot (White Background)"):
+            fig_save, ax_save = plt.subplots(figsize=(fig_width, fig_height))
+            fig_save.patch.set_facecolor("white")
+            ax_save.set_facecolor("white")
+            
+            sns.heatmap(
+                corr_matrix,
+                annot=True,
+                cmap="RdBu_r",
+                vmin=-1,
+                vmax=1,
+                square=True,
+                ax=ax_save,
+                fmt=".2f",
+                cbar_kws={'shrink': 0.75, 'label': 'Correlation'}
+            )
+            ax_save.set_title(f"{corr_method.capitalize()} Correlation Matrix with Applied Lags", color="black")
+            plt.xticks(rotation=45, ha="right", color="black")
+            plt.yticks(rotation=0, color="black")
+            
+            buf = io.BytesIO()
+            fig_save.savefig(buf, format="png", bbox_inches="tight", facecolor="white")
+            buf.seek(0)
+            st.download_button(
+                "Download Plot as PNG",
+                data=buf,
+                file_name=f"correlation_heatmap_with_lags_{corr_method}.png",
+                mime="image/png"
+            )
+            plt.close(fig_save)
     else:
-        corr_matrix = df_corr.corr(method="spearman")
-    
-    num_features = len(corr_matrix.columns)
-    fig_width = max(8, num_features * 0.8)
-    fig_height = max(6, num_features * 0.8)
-    fig_corr, ax_corr = plt.subplots(figsize=(fig_width, fig_height))
-    fig_corr.patch.set_facecolor("black")
-    ax_corr.set_facecolor("black")
-    sns.heatmap(
-        corr_matrix,
-        annot=True,
-        cmap="RdBu_r",
-        vmin=-1,
-        vmax=1,
-        square=True,
-        ax=ax_corr,
-        fmt=".2f",
-        cbar_kws={'shrink': 0.8, 'label': 'Correlation'}
-    )
-    ax_corr.set_title(f"{corr_method.capitalize()} Correlation Matrix", color="white")
-    plt.xticks(rotation=45, ha="right", color="white")
-    plt.yticks(rotation=0, color="white")
-    st.pyplot(fig_corr)
-
-######################################
-# Option to Save Plot on White Background
-######################################
-if st.button("Save Correlation Plot (White Background)"):
-    fig_save, ax_save = plt.subplots(figsize=(fig_width, fig_height))
-    fig_save.patch.set_facecolor("white")
-    ax_save.set_facecolor("white")
-    
-    sns.heatmap(
-        corr_matrix,
-        annot=True,
-        cmap="RdBu_r",
-        vmin=-1,
-        vmax=1,
-        square=True,
-        ax=ax_save,
-        fmt=".2f",
-        cbar_kws={'shrink': 0.75, 'label': 'Correlation'}
-    )
-    ax_save.set_title(f"{corr_method} Correlation Matrix of On-chain Features", color="black")
-    plt.xticks(rotation=45, ha="right", color="black")
-    plt.yticks(rotation=0, color="black")
-    
-    buf = io.BytesIO()
-    fig_save.savefig(buf, format="png", bbox_inches="tight", facecolor="white")
-    buf.seek(0)
-    st.download_button(
-        "Download Plot as PNG",
-        data=buf,
-        file_name=f"correlation_heatmap_{corr_method}.png",
-        mime="image/png"
-    )
-    plt.close(fig_save)
+        st.warning("Not enough data after applying lags and derivatives to compute correlation.")
 
 ######################################
 # (D) Interactive Plotly Chart (BTC Price vs. Interactive Indicator)
