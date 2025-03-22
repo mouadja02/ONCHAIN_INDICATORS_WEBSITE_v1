@@ -642,7 +642,7 @@ if do_lag_corr:
             df_temp = df_merge_lag.copy()
             if lag != 0:
                 # Invert the lag value: negative slider means indicator from the past
-                df_temp[chosen_indicator_lag] = df_temp[chosen_indicator_lag].shift(-lag)
+                df_temp[chosen_indicator_lag] = df_temp[chosen_indicator_lag].shift(lag)
             
             # Drop rows with NaNs introduced by the shift
             df_temp.dropna(inplace=True)
