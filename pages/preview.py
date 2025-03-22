@@ -476,7 +476,7 @@ else:
         st.warning("Not enough data after applying lags and derivatives to compute correlation.")
 
 ######################################
-# (D) Interactive Plotly Chart (BTC Price vs. Interactive Indicator)
+# (D) Interactive Plotly Chart (BTC Price vs. Interactive Indicator with Lags and Derivatives)
 ######################################
 st.subheader("Interactive Plot: BTC Price vs. Indicator")
 if merged_df is None or merged_df.empty:
@@ -484,38 +484,84 @@ if merged_df is None or merged_df.empty:
 elif interactive_indicator is None:
     st.info("Please select an indicator for the interactive plot.")
 else:
-    # Use merged_df for plotting
+    # Instead of using the merged_df directly, we'll prepare the data with proper lags and derivatives
+    # This ensures consistency with the correlation calculations
+    
+    # 1. Get raw data for BTC price and the selected indicator
     btc_feat = "BTC PRICE:BTC_PRICE_USD"
-    if btc_feat not in merged_df.columns:
-        st.error("BTC PRICE data not found.")
+    df_btc = load_feature(btc_feat, query_start_date, query_end_date)
+    df_ind = load_feature(interactive_indicator, query_start_date, query_end_date)
+    
+    # 2. Merge on DATE
+    plot_df = pd.merge(df_btc, df_ind, on="DATE", how="inner")
+    
+    # 3. Apply derivatives if selected
+    btc_has_deriv = derivatives.get(btc_feat, False)
+    ind_has_deriv = derivatives.get(interactive_indicator, False)
+    
+    if btc_has_deriv:
+        plot_df[btc_feat] = plot_df[btc_feat].diff()
+        btc_display_name = f"Δ{btc_feat}"
+    else:
+        btc_display_name = btc_feat
+        
+    if ind_has_deriv:
+        plot_df[interactive_indicator] = plot_df[interactive_indicator].diff()
+        ind_display_name = f"Δ{interactive_indicator}"
+    else:
+        ind_display_name = interactive_indicator
+    
+    # 4. Apply lag to indicator if specified
+    ind_lag = shifts.get(interactive_indicator, 0)
+    if ind_lag != 0:
+        # Apply lag to the indicator
+        plot_df[interactive_indicator] = plot_df[interactive_indicator].shift(ind_lag)
+        ind_display_name = f"{ind_display_name} (lag:{ind_lag})"
+    
+    # 5. Drop NaN values introduced by derivatives or lags
+    plot_df.dropna(inplace=True)
+    
+    # 6. Filter by plotting date range if specified
+    if plot_start_date:
+        plot_df = plot_df[plot_df["DATE"] >= plot_start_date]
+    if plot_end_date:
+        plot_df = plot_df[plot_df["DATE"] <= plot_end_date]
+    
+    # 7. Create the plot if we have data
+    if plot_df.empty:
+        st.warning("Not enough data to plot after applying lags and derivatives.")
     else:
         fig = go.Figure()
         fig.add_trace(go.Scatter(
-            x=merged_df["DATE"],
-            y=merged_df[btc_feat],
+            x=plot_df["DATE"],
+            y=plot_df[btc_feat],
             mode="lines",
-            name=btc_feat,
+            name=btc_display_name,
             line=dict(color=COLOR_PALETTE[0]),
             yaxis="y1"
         ))
         fig.add_trace(go.Scatter(
-            x=merged_df["DATE"],
-            y=merged_df[interactive_indicator],
+            x=plot_df["DATE"],
+            y=plot_df[interactive_indicator],
             mode="lines",
-            name=interactive_indicator,
+            name=ind_display_name,
             line=dict(color=COLOR_PALETTE[1]),
             yaxis="y2"
         ))
+        
+        # Determine title with derivative and lag info
+        plot_title = f"{btc_display_name} (Left Axis) vs. {ind_display_name} (Right Axis)"
+        
         fig.update_layout(
             xaxis=dict(domain=[0.1, 0.9]),
             yaxis=dict(
-                title=dict(text=btc_feat, font=dict(color=COLOR_PALETTE[0])),
+                title=dict(text=btc_display_name, font=dict(color=COLOR_PALETTE[0])),
                 tickfont=dict(color=COLOR_PALETTE[0]),
                 anchor="x",
                 side="left"
             ),
             yaxis2=dict(
-                title=dict(text=interactive_indicator, font=dict(color=COLOR_PALETTE[1])),
+                title=dict(text=ind_display_name, font=dict(color=COLOR_PALETTE[1])),
                 tickfont=dict(color=COLOR_PALETTE[1]),
                 anchor="x",
                 overlaying="y",
@@ -526,7 +572,7 @@ else:
             plot_bgcolor="black",
             legend=dict(x=0.01, y=0.99, bgcolor="rgba(0,0,0,0)"),
             hovermode="x unified",
-            title="BTC Price (Left Axis) vs. Indicator (Right Axis)"
+            title=plot_title
         )
         fig.update_xaxes(
             showgrid=True, gridcolor="grey", zeroline=False, linecolor="white", 
@@ -534,6 +580,22 @@ else:
         )
         fig.update_yaxes(showgrid=True, gridcolor="grey")
         st.plotly_chart(fig, use_container_width=True)
+        
+        # 8. Optional explanation of the plot
+        with st.expander("About this plot"):
+            st.markdown("""
+            This plot shows the relationship between BTC price and the selected indicator, with the following applied:
+            
+            - **Left Y-axis (blue)**: BTC Price{btc_deriv_info}
+            - **Right Y-axis (orange)**: {ind_name}{ind_deriv_info}{ind_lag_info}
+            
+            The correlation between these series is shown in the correlation matrix above.
+            """.format(
+                btc_deriv_info=" (with derivative applied)" if btc_has_deriv else "",
+                ind_name=interactive_indicator,
+                ind_deriv_info=" (with derivative applied)" if ind_has_deriv else "",
+                ind_lag_info=f" (lagged by {ind_lag} days)" if ind_lag != 0 else ""
+            ))
 
 ######################################
 # (E) Multi-line Chart of All Selected Features (Optional)
