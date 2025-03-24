@@ -643,11 +643,16 @@ else:
 ######################################
 st.subheader("Lag-based Correlation: Single Indicator vs. BTC Price")
 
-# -- Sidebar or main UI for picking one indicator & derivative settings
-st.markdown("Use the settings below to compute the correlation between **BTC Price** and **one chosen indicator** over a range of lag days.")
+st.markdown(
+    """
+    **Lag Explanation:**  
+    A **negative lag** (e.g., –1) means the indicator’s value from yesterday is compared with today’s BTC Price (the indicator leads the price).  
+    A **positive lag** would compare a future indicator with today’s BTC Price (the indicator lags behind).
+    """
+)
 
 with st.expander("Lag-Correlation Settings", expanded=True):
-    # 1. Pick the single indicator (any from TABLE_DICT, or reuse your `all_tables`)
+    # 1. Pick the single indicator (from TABLE_DICT)
     tables_for_lag = list(TABLE_DICT.keys())
     chosen_table_lag = st.selectbox("Select Table for the Indicator:", tables_for_lag, index=0)
     
@@ -664,93 +669,79 @@ with st.expander("Lag-Correlation Settings", expanded=True):
     st.write("Choose the range of lag days (negative to positive).")
     default_min_lag = -30
     default_max_lag = 30
-    min_lag = st.number_input("Minimum Lag (could be negative)", value=default_min_lag, step=1)
+    min_lag = st.number_input("Minimum Lag (can be negative)", value=default_min_lag, step=1)
     max_lag = st.number_input("Maximum Lag", value=default_max_lag, step=1)
-    
-    # 5. Button to compute
-    do_lag_corr = st.button("Compute Lag Correlation")
 
-if do_lag_corr:
-    # Load BTC Price (raw, no shift)
-    btc_feat_name = "BTC PRICE:BTC_PRICE_USD"
-    df_btc = load_feature(btc_feat_name, query_start_date, query_end_date)
-    df_btc.sort_values("DATE", inplace=True)
-    df_btc.dropna(subset=[btc_feat_name], inplace=True)
+# Automatically compute lag correlation without a button press.
+btc_feat_name = "BTC PRICE:BTC_PRICE_USD"
+df_btc = load_feature(btc_feat_name, query_start_date, query_end_date)
+df_btc.sort_values("DATE", inplace=True)
+df_btc.dropna(subset=[btc_feat_name], inplace=True)
+
+df_ind = load_feature(chosen_indicator_lag, query_start_date, query_end_date)
+df_ind.sort_values("DATE", inplace=True)
+df_ind.dropna(subset=[chosen_indicator_lag], inplace=True)
+
+df_merge_lag = pd.merge(df_btc, df_ind, on="DATE", how="inner").dropna()
+
+if btc_deriv_lag:
+    df_merge_lag[btc_feat_name] = df_merge_lag[btc_feat_name].diff()
+if indicator_deriv_lag:
+    df_merge_lag[chosen_indicator_lag] = df_merge_lag[chosen_indicator_lag].diff()
+df_merge_lag.dropna(inplace=True)
+
+if df_merge_lag.empty:
+    st.warning("Not enough data to compute lag correlation.")
+else:
+    lag_values = list(range(int(min_lag), int(max_lag) + 1))
+    correlations = []
     
-    # Load chosen indicator
-    df_ind = load_feature(chosen_indicator_lag, query_start_date, query_end_date)
-    df_ind.sort_values("DATE", inplace=True)
-    df_ind.dropna(subset=[chosen_indicator_lag], inplace=True)
-    
-    # Merge on DATE
-    df_merge_lag = pd.merge(df_btc, df_ind, on="DATE", how="inner").dropna()
-    
-    # Apply derivative if selected
-    if btc_deriv_lag:
-        df_merge_lag[btc_feat_name] = df_merge_lag[btc_feat_name].diff()
-    if indicator_deriv_lag:
-        df_merge_lag[chosen_indicator_lag] = df_merge_lag[chosen_indicator_lag].diff()
-    df_merge_lag.dropna(inplace=True)
-    
-    # If there's not enough data, skip
-    if df_merge_lag.empty:
-        st.warning("Not enough data to compute lag correlation.")
-    else:
-        # We'll compute correlation for each integer lag in [min_lag, max_lag]
-        lag_values = list(range(int(min_lag), int(max_lag) + 1))
-        correlations = []
+    for lag in lag_values:
+        df_temp = df_merge_lag.copy()
+        if lag != 0:
+            # If lag is positive, shifting the indicator downwards (using its past value)
+            # If lag is negative, this automatically shifts upwards (using a future value)
+            df_temp[chosen_indicator_lag] = df_temp[chosen_indicator_lag].shift(lag)
         
-        for lag in lag_values:
-            df_temp = df_merge_lag.copy()
-            if lag != 0:
-                # Invert the lag value: negative slider means indicator from the past
-                df_temp[chosen_indicator_lag] = df_temp[chosen_indicator_lag].shift(lag)
-            
-            # Drop rows with NaNs introduced by the shift
-            df_temp.dropna(inplace=True)
-            
-            # If there's enough data left, calculate correlation
-            if len(df_temp) > 1:
-                if corr_method == "pearson":
-                    corr_val = df_temp[[btc_feat_name, chosen_indicator_lag]].corr(method="pearson").iloc[0,1]
-                else:
-                    corr_val = df_temp[[btc_feat_name, chosen_indicator_lag]].corr(method="spearman").iloc[0,1]
+        df_temp.dropna(inplace=True)
+        
+        if len(df_temp) > 1:
+            if corr_method == "pearson":
+                corr_val = df_temp[[btc_feat_name, chosen_indicator_lag]].corr(method="pearson").iloc[0,1]
             else:
-                corr_val = np.nan
-            
-            correlations.append(corr_val)
-
+                corr_val = df_temp[[btc_feat_name, chosen_indicator_lag]].corr(method="spearman").iloc[0,1]
+        else:
+            corr_val = np.nan
         
-        # Build a dataframe for plotting
-        df_lag_corr = pd.DataFrame({
-            "Lag": lag_values,
-            "Correlation": correlations
-        })
-        
-        # Plotly line chart
-        fig_lag = go.Figure()
-        fig_lag.add_trace(go.Scatter(
-            x=df_lag_corr["Lag"],
-            y=df_lag_corr["Correlation"],
-            mode="lines+markers",
-            name="Correlation"
-        ))
-        fig_lag.update_layout(
-            title=f"Lag-Correlation: BTC_PRICE vs. {chosen_indicator_lag}",
-            xaxis_title="Lag (days)",
-            yaxis_title=f"{corr_method.capitalize()} Correlation",
-            paper_bgcolor="black",
-            plot_bgcolor="black",
-            font=dict(color="white"),
-            hovermode="x unified"
-        )
-        fig_lag.update_xaxes(showgrid=True, gridcolor="grey", linecolor="white")
-        fig_lag.update_yaxes(showgrid=True, gridcolor="grey", zeroline=True, zerolinecolor="grey")
-        
-        st.plotly_chart(fig_lag, use_container_width=True)
-        
-        # Optional: show the best lag (max correlation in absolute value, or max positive?)
-        max_corr_idx = np.nanargmax(np.abs(df_lag_corr["Correlation"]))
-        best_lag = df_lag_corr["Lag"][max_corr_idx]
-        best_corr = df_lag_corr["Correlation"][max_corr_idx]
-        st.write(f"**Highest absolute correlation** occurs at lag = {best_lag} days, correlation = {best_corr:.3f}.")
+        correlations.append(corr_val)
+    
+    df_lag_corr = pd.DataFrame({
+        "Lag": lag_values,
+        "Correlation": correlations
+    })
+    
+    fig_lag = go.Figure()
+    fig_lag.add_trace(go.Scatter(
+        x=df_lag_corr["Lag"],
+        y=df_lag_corr["Correlation"],
+        mode="lines+markers",
+        name="Correlation"
+    ))
+    fig_lag.update_layout(
+        title=f"Lag-Correlation: BTC_PRICE vs. {chosen_indicator_lag}",
+        xaxis_title="Lag (days)",
+        yaxis_title=f"{corr_method.capitalize()} Correlation",
+        paper_bgcolor="black",
+        plot_bgcolor="black",
+        font=dict(color="white"),
+        hovermode="x unified"
+    )
+    fig_lag.update_xaxes(showgrid=True, gridcolor="grey", linecolor="white")
+    fig_lag.update_yaxes(showgrid=True, gridcolor="grey", zeroline=True, zerolinecolor="grey")
+    
+    st.plotly_chart(fig_lag, use_container_width=True)
+    
+    max_corr_idx = np.nanargmax(np.abs(df_lag_corr["Correlation"]))
+    best_lag = df_lag_corr["Lag"][max_corr_idx]
+    best_corr = df_lag_corr["Correlation"][max_corr_idx]
+    st.write(f"**Highest absolute correlation** occurs at lag = {best_lag} days, correlation = {best_corr:.3f}.")
